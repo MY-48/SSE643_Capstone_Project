@@ -18,42 +18,28 @@ Use of AI assistance: Make full and complete use of any and all AI software engi
 Steps for completion:
 
 1. Initial game concept discussion board posting.  Due April 12th at the latest (please post this as early as possible). Post information and game architecture diagrams to the discussion board for comments and advice from your fellow students.  The goal here is to acquire constructive commentary from your fellow students to assist in your game programming task.
-
 2. Please provide constructive game design comments and advice for at least 2 fellow students in the discussion board.
-
 3. Complete your game concept design (keep things as SIMPLE as possible; you are STRICTLY limited to 1,000 lines-of-code). Code and debug your game. Have playtesting completed by fellow students wherever possible. Upload your game if possible to the web to make it accessible to the public at large. Instructions to play your game should be accessible from the gameplay page, or simply shown on or near the controls. Your code must be well commented (comments do not count toward the 1,000 LOC maximum). Completion date: April 19th.
-
 4. Write your essay submission. The essay submission should consist of 4 PDF or DOCX files:
-
-A. Game User Guide: extended game background and instructions for the player. You can also link this on your game play page.
-
-B. Game final architecture and description: you can use UML or other style diagrams, or merely describe the simple architecture and libraries used in text, as well as key variables, software design patterns, and objects, and the game loop sequence.
-
-C. Programmer discussion: document challenges, lessons learned, and relevant facts that occurred during game development, testing, and debugging.
-
-D. AI assistance: provide detailed commentary on your use of AI tools and their results during development. Provide advice for others using these tools.
-
+   1. Game User Guide: extended game background and instructions for the player. You can also link this on your game play page.
+   2. Game final architecture and description: you can use UML or other style diagrams, or merely describe the simple architecture and libraries used in text, as well as key variables, software design patterns, and objects, and the game loop sequence.
+   3. Programmer discussion: document challenges, lessons learned, and relevant facts that occurred during game development, testing, and debugging.
+   4. AI assistance: provide detailed commentary on your use of AI tools and their results during development. Provide advice for others using these tools.
 5. Final Discussion Posting: Share your game with the class!  Post a link for play, as well as the following each as a separate file attachment (no zip files please):
-
-A. Your comments and discussion as well as screen shot(s) in your primary post.
-
-B. Attach or link a game play video clip, ideally with your voiceover describing how to access and play your game.
-
-C. [Optional] Code snippets that illustrate some of the challenging or main sections of your design. Add you own additional comments to describe to the class various learning points.
-
-5. Please comment on at least other 2 student's final game posting, perhaps with game play experiences or helpful debugging information.
-
-6. VOTE on the best SSE 643 game after April 25th.
+   1. Your comments and discussion as well as screen shot(s) in your primary post.
+   2. Attach or link a game play video clip, ideally with your voiceover describing how to access and play your game.
+   3. [Optional] Code snippets that illustrate some of the challenging or main sections of your design. Add you own additional comments to describe to the class various learning points.
+6. Please comment on at least other 2 student's final game posting, perhaps with game play experiences or helpful debugging information.
+7. VOTE on the best SSE 643 game after April 25th.
 
 GOOD LUCK AND BEST WISHES ON YOUR GAME PROJECT!
 
 Dr. Pelosi
 
 Game Design Tips:
-
-LOC <= 1,000.
-Simple, simple, simple.
-Player takes < 30 seconds to be up and running your game after loading the page.
-Addictive game play.
-Beautiful use of Three.js graphics and 3D objects.
-Thoroughly debug your game concept in the design phase wherever possible.
+- LOC <= 1,000.
+- Simple, simple, simple.
+- Player takes < 30 seconds to be up and running your game after loading the page.
+- Addictive game play.
+- Beautiful use of Three.js graphics and 3D objects.
+- Thoroughly debug your game concept in the design phase wherever possible.
