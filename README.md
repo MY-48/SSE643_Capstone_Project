@@ -1,4 +1,4 @@
-# SSE643_Capstone_Project
+# SSE643 Capstone Project
 This is the capstone assignment series/project for SSE 643. This series involves 6 separate tasks, 3 of which will be graded independently (discussion, essay, and programming task).
 
 Here is the breakdown:
