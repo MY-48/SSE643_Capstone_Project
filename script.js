@@ -40,7 +40,7 @@ const poolBallMass = 0.170; //170 grams or 6oz
 const poolBallDiameter = 0.057; //57mm or 2 1/4 inch
 var tableLength = 2.24; //224cm or 88inch
 var tableWidth = tableLength/2; //112cm or 44inch
-var gameType = "9-ball"
+var gameType = "8-ball"
 //================================================
 
 // Function to get image maps
@@ -75,8 +75,7 @@ function gen_pool_ball(ball){
 
 // Create physics object for pool balls
 function gen_phys_pool_ball(ball, rack_pos){
-    console.log(rack_pos+"h")
-    var pos = new CANNON.Vec3(rack_pos[0],rack_pos[1],rack_pos[2]);//Math.random()*0.1, Math.random()*0, Math.random()*0.1);
+    var pos = new CANNON.Vec3(rack_pos[0],rack_pos[1],rack_pos[2]);//(Math.random()*0.1, Math.random()*0, Math.random()*0.1);
     if (ball == "cue_ball") pos.set(0, poolBallDiameter, -0.8);
     const ballShape = new CANNON.Sphere(poolBallDiameter/2);
     const ballBody = new CANNON.Body({
@@ -111,49 +110,42 @@ function rack_balls(){
     }
 }
 
-function generatePoolBallPositions(radius, gameType) {
+function generatePoolBallPositions(radius) {
     const positions = [];
     let startX = 0; // The frontmost ball position
+    let rows = 5;
+    for (let row = 0; row < rows; row++) {
+        let numBalls = row + 1; // 1, 2, 3, 4, 5
+        let rowX = startX - row * radius * 2 * Math.sin(Math.PI / 3);
+        let rowZStart = -((numBalls - 1) * radius * 2) / 2;
 
-    if (gameType === "8-ball") {
-        let rows = 5;
-        for (let row = 0; row < rows; row++) {
-            let numBalls = row + 1; // 1, 2, 3, 4, 5
-            let rowX = startX - row * radius * 2 * Math.sin(Math.PI / 3);
-            let rowZStart = -((numBalls - 1) * radius * 2) / 2;
-
-            for (let i = 0; i < numBalls; i++) {
-                let posX = rowX;
-                let posZ = rowZStart + i * radius * 2;
-                positions.push([posX, radius, posZ]);
-            }
-        }
-    } else if (gameType === "9-ball") {
-        const rowStructure = [1, 2, 3, 2, 1]; // Diamond shape (9 balls total)
-        let ballIndex = 0;
-
-        for (let row = 0; row < rowStructure.length; row++) {
-            let numBalls = rowStructure[row];
-            let rowX = startX - row * radius * 2 * Math.sin(Math.PI / 3);
-            let rowZStart = -((numBalls - 1) * radius * 2) / 2;
-
-            for (let i = 0; i < numBalls; i++) {
-                let posX = rowX;
-                let posZ = rowZStart + i * radius * 2;
-                positions.push([posX, radius, posZ]);
-                ballIndex++;
-            }
+        for (let i = 0; i < numBalls; i++) {
+            let posX = rowX;
+            let posZ = rowZStart + i * radius * 2;
+            positions.push([posZ, radius, -posX]);
         }
     }
-
     return positions;
 }
 
-const eightBallPositions = generatePoolBallPositions(poolBallDiameter/2, "8-ball");
-const nineBallPositions = generatePoolBallPositions(poolBallDiameter/2, "9-ball");
+/* Randomize array in-place using Durstenfeld shuffle algorithm */
+function shuffleArrayWithFixedIndex(array, fixedIndex) {
+    for (let i = array.length - 1; i > 0; i--) {
+        if (i === fixedIndex) continue;
 
-console.log("8-Ball Positions:", eightBallPositions);
-console.log("9-Ball Positions:", nineBallPositions);
+        let j;
+        do {
+            j = Math.floor(Math.random() * (i + 1));
+        } while (j === fixedIndex); // Ensure j is not the fixed index
+
+        // Swap elements
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+}
+
+const ballPositions = generatePoolBallPositions(poolBallDiameter/2);
+
+console.log("8-Ball Positions:", ballPositions);
 
 //rack_balls();
 
@@ -162,18 +154,23 @@ if (gameType === "8-ball") {
     for (var i = 0; i <= 15; i++){
         gen_pool_ball(i);
     }
+    shuffleArrayWithFixedIndex(ballPositions,11);
 }
 else if (gameType === "9-ball") {
     for (var i = 0; i <= 9; i++){
         gen_pool_ball(i);
     }
 }
+//console.log(ballPositions);
 
 var pool_balls = [[],[]];
+var ind = 0;
 for (var element of scene.children){
     if (element.name.includes("ball")){
         pool_balls[0].push(element);
-        gen_phys_pool_ball(element.name, nineBallPositions[element.id]);
+        if (element.name.includes("cue")) gen_phys_pool_ball(element.name, [0,0,0]);
+        else {gen_phys_pool_ball(element.name, ballPositions[ind]);
+        ind++;}
     }
 }
 for (var element of world.bodies){
@@ -216,10 +213,10 @@ scene.add(light);
 
 // Animation Loop
 function animate() {
-    //world.fixedStep(1 / 60);
+    world.fixedStep(1 / 60);
     renderer.render(scene, camera);
     controls.update();
-    cannonDebugger.update() // Update the CannonDebugger meshes
+    //cannonDebugger.update() // Update the CannonDebugger meshes
     requestAnimationFrame(animate);
 
     for (var i = 0; i <= pool_balls[0].length-1; i++){
@@ -239,6 +236,6 @@ setTimeout(function() {
 }, 3000);
 
 setTimeout(function() {
-    pool_balls[1][0].applyImpulse(new CANNON.Vec3(0, 0, 2)); //Add a force to the cue ball
+    pool_balls[1][0].applyImpulse(new CANNON.Vec3(0, Math.random()*0.02-0.5, 1)); //Add a force to the cue ball
 
 }, 3100);
