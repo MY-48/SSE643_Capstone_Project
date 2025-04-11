@@ -50,14 +50,14 @@ function getTexture(index) {
     return texture;
 }
 
-var physicsMaterial = new CANNON.Material();//"bouncyMaterial"
-var physicsContactMaterial = new CANNON.ContactMaterial(physicsMaterial,physicsMaterial,{
+const hardMaterial = new CANNON.Material("hardMaterial");
+const ballContactMaterial = new CANNON.ContactMaterial(hardMaterial,hardMaterial,{
     contactEquationRelaxation: 2,
     friction: 0.1,
     restitution: 0.8
 });
 // Add the contact materials to the world
-world.addContactMaterial(physicsContactMaterial);
+world.addContactMaterial(ballContactMaterial);
 
 // Pool Balls=====================================
 // Function to create pool ball meshes
@@ -80,10 +80,11 @@ function gen_phys_pool_ball(ball, rack_pos){
     const ballShape = new CANNON.Sphere(poolBallDiameter/2);
     const ballBody = new CANNON.Body({
         mass: poolBallMass,
-        //linearDamping: 0,
+        linearDamping: 0.34,
+        angularDamping: 0.34,
         position: pos,
         shape: ballShape,
-        material: physicsMaterial
+        material: hardMaterial
     });
     ballBody.name = ball;
     world.addBody(ballBody);
@@ -181,18 +182,27 @@ console.log(pool_balls);
 
 // Pool Table=====================================
 // Create Pool Table
-const tableGeo = new THREE.BoxGeometry(tableWidth,0.1,tableLength,10,10,10);
-const tableMat = new THREE.MeshStandardMaterial({
-    color: 0x00ff00,
-    map: textureLoader.load("assets/table_felt.jpg")
+const groundMaterial = new CANNON.Material('ground');
+const ball_ground = new CANNON.ContactMaterial(groundMaterial, hardMaterial, {
+    friction: 100,
+    restitution: 0.3,
+    contactEquationStiffness: 1e8,
+    contactEquationRelaxation: 3,
+    frictionEquationStiffness: 1e8,
+    frictionEquationRegularizationTime: 3,
 });
+world.addContactMaterial(ball_ground);
+
+const tableGeo = new THREE.BoxGeometry(tableWidth,0.1,tableLength,10,10,10);
+const tableMat = new THREE.MeshStandardMaterial({color: 0x00ff00, map: textureLoader.load("assets/table_felt.jpg")});
 const tableModel = new THREE.Mesh(tableGeo, tableMat);
 scene.add(tableModel);
 
 const tableBody = new CANNON.Body({
     type: CANNON.Body.STATIC,
     position: new CANNON.Vec3(0,-0.1,0),
-    shape: new CANNON.Box(new CANNON.Vec3(tableWidth/2,0.05,tableLength/2))
+    shape: new CANNON.Box(new CANNON.Vec3(tableWidth/2,0.05,tableLength/2)),
+    material: groundMaterial
 });
 tableBody.name = "Table";
 world.addBody(tableBody);
