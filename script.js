@@ -8,7 +8,7 @@ import { GLTFLoader } from 'three/examples/jsm/Addons.js';
 import CannonDebugger from 'cannon-es-debugger'
 
 
-// Create top-level environments
+// Create top-level environments ==================================================
 const scene = new THREE.Scene();
 const world = new CANNON.World({gravity: new CANNON.Vec3(0,-9.81, 0)});
 const cannonDebugger = new CannonDebugger(scene, world, {color: 0x00ff00, scale: 1.1});
@@ -33,7 +33,7 @@ window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-//================================================
+//=================================================================================
 //Enviromnet Variables
 // Constants
 const poolBallMass = 0.170; //170 grams or 6oz
@@ -41,7 +41,24 @@ const poolBallDiameter = 0.057; //57mm or 2 1/4 inch
 var tableLength = 2.24; //224cm or 88inch
 var tableWidth = tableLength/2; //112cm or 44inch
 var gameType = "8-ball"
-//================================================
+
+const hardMaterial = new CANNON.Material("hardMaterial");
+const groundMaterial = new CANNON.Material('ground');
+
+const ballContactMaterial = new CANNON.ContactMaterial(hardMaterial,hardMaterial,{
+    contactEquationRelaxation: 2,
+    friction: 0.1,
+    restitution: 1
+});
+const ball_ground = new CANNON.ContactMaterial(groundMaterial, hardMaterial, {
+    friction: 100,
+    restitution: 0.3,
+    contactEquationStiffness: 1e8,
+    contactEquationRelaxation: 3,
+    frictionEquationStiffness: 1e8,
+    frictionEquationRegularizationTime: 3,
+});
+//=================================================================================
 
 // Function to get image maps
 function getTexture(index) {
@@ -50,16 +67,7 @@ function getTexture(index) {
     return texture;
 }
 
-const hardMaterial = new CANNON.Material("hardMaterial");
-const ballContactMaterial = new CANNON.ContactMaterial(hardMaterial,hardMaterial,{
-    contactEquationRelaxation: 2,
-    friction: 0.1,
-    restitution: 0.8
-});
-// Add the contact materials to the world
-world.addContactMaterial(ballContactMaterial);
-
-// Pool Balls=====================================
+// Pool Balls======================================================================
 // Function to create pool ball meshes
 function gen_pool_ball(ball){
     const ballGeo = new THREE.SphereGeometry(poolBallDiameter/2,32,32);
@@ -96,21 +104,7 @@ function sync_balls(model, cannonBody){
     model.quaternion.copy(cannonBody.quaternion);
 }
 
-function rack_balls(){
-    const rackSideShape = new CANNON.Box(new CANNON.Vec3(poolBallDiameter*5/2,poolBallDiameter,0.01));
-    for (var i = 1; i <= 3; i++){
-        const rackBody = new CANNON.Body({
-            type: CANNON.Body.STATIC,
-            mass: 0,
-            position: new CANNON.Vec3(rackSideShape.halfExtents.y*2*Math.sin(Math.PI*2/3*i),0.0,rackSideShape.halfExtents.y*2*Math.cos(Math.PI*2/3*i)),
-            shape: rackSideShape
-        });
-        rackBody.quaternion.setFromEuler(0, Math.PI*2/3*i, 0);
-        rackBody.name = "rack"+i;
-        world.addBody(rackBody);
-    }
-}
-
+// generatePoolBallPositions FUNCTION
 function generatePoolBallPositions(radius) {
     const positions = [];
     let startX = 0; // The frontmost ball position
@@ -129,7 +123,7 @@ function generatePoolBallPositions(radius) {
     return positions;
 }
 
-/* Randomize array in-place using Durstenfeld shuffle algorithm */
+// Randomize array in-place using Durstenfeld shuffle algorithm
 function shuffleArrayWithFixedIndex(array, fixedIndex) {
     for (let i = array.length - 1; i > 0; i--) {
         if (i === fixedIndex) continue;
@@ -144,14 +138,15 @@ function shuffleArrayWithFixedIndex(array, fixedIndex) {
     }
 }
 
+// Add the contact materials to the world
+world.addContactMaterial(ballContactMaterial);
+
 const ballPositions = generatePoolBallPositions(poolBallDiameter/2);
 
 console.log("8-Ball Positions:", ballPositions);
 
-//rack_balls();
-
 //Create Pool Balls
-if (gameType === "8-ball") {
+if (gameType === "8-ball") { 
     for (var i = 0; i <= 15; i++){
         gen_pool_ball(i);
     }
@@ -162,7 +157,7 @@ else if (gameType === "9-ball") {
         gen_pool_ball(i);
     }
 }
-//console.log(ballPositions);
+
 
 var pool_balls = [[],[]];
 var ind = 0;
@@ -180,17 +175,9 @@ for (var element of world.bodies){
 
 console.log(pool_balls);
 
-// Pool Table=====================================
+// Pool Table======================================================================
 // Create Pool Table
-const groundMaterial = new CANNON.Material('ground');
-const ball_ground = new CANNON.ContactMaterial(groundMaterial, hardMaterial, {
-    friction: 100,
-    restitution: 0.3,
-    contactEquationStiffness: 1e8,
-    contactEquationRelaxation: 3,
-    frictionEquationStiffness: 1e8,
-    frictionEquationRegularizationTime: 3,
-});
+
 world.addContactMaterial(ball_ground);
 
 const tableGeo = new THREE.BoxGeometry(tableWidth,0.1,tableLength,10,10,10);
@@ -206,12 +193,11 @@ const tableBody = new CANNON.Body({
 });
 tableBody.name = "Table";
 world.addBody(tableBody);
-console.log(world);
-//tableBody.quaternion.setFromEuler(0, 0, 0);
+
 tableModel.position.copy(tableBody.position);
 tableModel.quaternion.copy(tableBody.quaternion);
 
-// Set camera starting position
+// Set camera & Lighting===========================================================
 camera.position.set(0,1,0);
 camera.lookAt(0,0,0);
 
@@ -221,7 +207,7 @@ const light = new THREE.AmbientLight(0xffffff, 3);
 light.name = "AmbientLight";
 scene.add(light);
 
-// Animation Loop
+// Animation Loop==================================================================
 function animate() {
     world.fixedStep(1 / 60);
     renderer.render(scene, camera);
@@ -236,6 +222,7 @@ function animate() {
 
 animate();
 
+// Timeout Functions===============================================================
 setTimeout(function() {
     for (let i = world.bodies.length - 1; i >= 0; i--) {
         const element = world.bodies[i];
