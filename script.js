@@ -1,4 +1,5 @@
 // SSE 643: Capstone Project
+// Interdimensional Pool: Classic pool with a couple twists such as pool guns, powerups, and ball portals once the balls are pocketed.
 // Michael Young
 
 import * as THREE from 'three'
@@ -6,27 +7,48 @@ import * as CANNON from 'cannon-es'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { OBJLoader } from 'three/examples/jsm/Addons.js';
 import CannonDebugger from 'cannon-es-debugger'
+import Stats from 'stats.js'
+import {Howl} from 'howler';
 
-
-// Create top-level environments ==================================================
+// Create top-level environments ==============================================
 const scene = new THREE.Scene();
-const world = new CANNON.World({gravity: new CANNON.Vec3(0,-9.81, 0)});
-const cannonDebugger = new CannonDebugger(scene, world, {color: 0x00ff00, scale: 1.0});
 
-// Initailize important things
+const world = new CANNON.World({gravity: new CANNON.Vec3(0,-9.81, 0)});
+world.solver.iterations = 20;
+
+// Initailize important things=================================================
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 
+// Debugging Helpers ==========================================================
 const axesHelper = new THREE.AxesHelper(5);
 scene.add(axesHelper);
 
-const textureLoader = new THREE.TextureLoader();
+const cannonDebugger = new CannonDebugger(scene, world, {color: 0x00ff00, scale: 1.0});
 
+const stats = new Stats();
+document.body.appendChild(stats.dom);
+
+// Loaders=====================================================================
+const textureLoader = new THREE.TextureLoader();
 const objectLoader = new OBJLoader();
+const audioLoader = new THREE.AudioLoader();
+
+// Audio Engine================================================================
+//const listener = new THREE.AudioListener();
+//camera.add(listener);
+//function playSound(path, volume){
+//    const newSound = new THREE.Audio(listener);
+//    audioLoader.load(path), function(buffer){
+//        newSound.setBuffer(buffer);
+//        newSound.setVolume(volume);    
+//    }
+//}
 
 //Window Resize handler
 window.addEventListener('resize', () => {
@@ -35,7 +57,7 @@ window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-//=================================================================================
+//=============================================================================
 //Enviromnet Variables
 var pool_balls = [[],[]];
 
@@ -52,15 +74,15 @@ const bumperMaterial = new CANNON.Material("bumper");
 
 const ballContactMaterial = new CANNON.ContactMaterial(ballMaterial,ballMaterial,{
     contactEquationRelaxation: 2,
-    friction: 0.3,
-    restitution: 0.9
+    friction: 0.7,
+    restitution: 0.85
 });
 const ball_ground = new CANNON.ContactMaterial(groundMaterial, ballMaterial, {
-    friction: 1,
+    friction: 0.6,
 });
 const ball_bumper = new CANNON.ContactMaterial(bumperMaterial, ballMaterial, {
     contactEquationRelaxation: 2,
-    friction: 2,
+    friction: 0.5,
     restitution: 0.7
 });
 
@@ -69,7 +91,7 @@ world.addContactMaterial(ballContactMaterial);
 world.addContactMaterial(ball_ground);
 world.addContactMaterial(ball_bumper);
 
-//=================================================================================
+//=============================================================================
 
 // Function to get image maps
 function getTexture(index) {
@@ -78,7 +100,7 @@ function getTexture(index) {
     return texture;
 }
 
-// Pool Balls======================================================================
+// Pool Balls==================================================================
 // Function to create pool ball meshes
 function gen_pool_ball(ball){
     const ballGeo = new THREE.SphereGeometry(poolBallDiameter/2,32,32);
@@ -183,7 +205,7 @@ function init_pool_balls(){
 }
 init_pool_balls();
 
-// Pool Table======================================================================
+// Pool Table==================================================================
 // Create Pool Table
 function createTrimesh(geometry) {
     // Ensure geometry is non-indexed for simplicity
@@ -219,7 +241,7 @@ objectLoader.load('assets/pool_table/Body1.obj', (object) => {
         material: bumperMaterial      
     });
     body.name = "Table";
-    world.addBody(body);
+    world.addBody(body); //See about making the mesh simpler for better performance
 });
 
 /*
@@ -238,6 +260,53 @@ const tableTop = new CANNON.Body({
 tableTop.quaternion.setFromAxisAngle(new CANNON.Vec3(0,1,0),Math.PI*1/2);
 tableTop.name = "TableTop";
 world.addBody(tableTop);
+
+var x = -0.57;
+var z = -0.6;
+for (var i=0; i<6;i++){
+    console.log(x+ " : "+ z);
+    const holeShape = new CANNON.Cylinder(poolBallDiameter*2,poolBallDiameter*2,0,10);//bumperPosRot[i][0]),
+    const holeBody = new CANNON.Body({
+        type: CANNON.Body.STATIC,
+        shape: holeShape,
+    });
+    holeBody.position.set(x,-0.1,z);
+    holeBody.name = "Hole"+i;
+    world.addBody(holeBody);
+    if (i == 5) break;
+    if (i == 2) z = 0.6;
+    if (i < 2) x += 0.57*2;
+    else if (i > 2) x -= 0.57*2;
+}
+
+//const clickSound = new Audio('assets/pool-ball-sound-effect.wav');
+//document.addEventListener('click', () => {
+//  clickSound.play();
+//});
+
+function playSound(path, volume){
+    var sound = new Howl({
+        src: [path],
+        volume: volume,
+    })
+    sound.play()
+}
+
+for (var element of world.bodies){
+    if (element.name.includes("Hole")){
+        element.addEventListener('collide', (event) => {
+            const { body, contact } = event;
+            console.log(`Collision detected between bodyA and body id: ${body.id}`);
+            console.log('Contact point:', contact.contactPointA);
+            console.log('Contact normal:', contact.ni);
+            //playSound('assets/pool-ball-sound-effect.wav', 1); //Modify sound with Audacity to shorten
+            //Teleport to ball jail
+            body.position.set(0,-0.05,0);
+          });
+          
+    }
+}
+
 /*
 const bumperPosRot = [[new CANNON.Vec3(0.5588*2,poolBallDiameter/2,0.05)], //end shape, side length
                       [new CANNON.Vec3(-0.5588,0.1,0)], //positions
@@ -259,7 +328,7 @@ for (var i=0; i<6;i++){
     world.addBody(tableBumper);
 }
 */
-// Set camera & Lighting===========================================================
+// Set camera & Lighting=======================================================
 camera.position.set(0,1,0);
 camera.lookAt(0,0,0);
 
@@ -274,28 +343,86 @@ dirlight.position.set(1,1,1);
 dirlight.name = "DirectionalLight";
 scene.add(dirlight);
 
-// Animation Loop==================================================================
+
+// Timeout Functions===========================================================
+
+setTimeout(function() {
+    //pool_balls[1][0].position.set(-0.57,0,-0.6);
+    //pool_balls[1][0].applyImpulse(new CANNON.Vec3(-1, 0, (Math.random()-0.5)*.1)); //Add a force to the cue ball
+
+}, 2000);
+
+setInterval(function() {
+    //pool_balls[1][0].applyImpulse(new CANNON.Vec3(Math.random()-0.5, 0, Math.random()-0.5)); //Add a force to the cue ball
+
+}, 6000);
+
+// Game Logic==================================================================
+const material = new THREE.LineBasicMaterial({
+	color: 0x0000ff
+});
+
+const points = [];
+points.push( new THREE.Vector3( -0.1, 0, 0 ) );
+points.push( new THREE.Vector3( 0, 0, 0 ) );
+
+const geometry = new THREE.BufferGeometry().setFromPoints( points );
+
+const cuePointer = new THREE.Line( geometry, material );
+scene.add( cuePointer );
+
+function cue_hit(){
+    console.log(cuePointer.rotation.y.toString())
+    console.log(cuePointer.rotation)
+    var x = Math.sin(cuePointer.rotation.y) *0.25
+    var z = Math.cos(cuePointer.rotation.y) *0.25
+    pool_balls[1][0].applyImpulse(new CANNON.Vec3(z,0,x));
+}
+
+const cueBall = pool_balls[1][0]; // CANNON.Body
+const cuePosition = cueBall.position.clone(); // Vec3
+const lineEnd = new CANNON.Vec3(x, y, z); // Target point on table
+
+// 1. Get direction vector (from cue ball *away from line end*)
+const direction = cuePosition.vsub(lineEnd); // pointing "back" from target
+direction.normalize();
+
+// 2. Scale by desired force
+const force = direction.scale(impulseStrength); // e.g., 5 or 10
+
+// 3. Apply impulse to the cue ball
+cueBall.applyImpulse(force, cueBall.position);
+
+//=============================
+var keys = {};
+// Event Listeners for Key Presses
+window.addEventListener('keydown', (event) => keys[event.code] = true);
+window.addEventListener('keyup', (event) => keys[event.code] = false);
+
+// Camera Movement Logic
+function updateCameraMovement() {
+    if (keys["KeyA"]) cuePointer.rotateY(0.1);  // aim left
+    if (keys["KeyD"]) cuePointer.rotateY(-0.1);  // aim right
+    if (keys["KeyW"]) cueBall.applyImpulse(force, cueBall.position);;
+}
+
+
+// ============================================================================
+// Animation Loop==============================================================
 function animate() {
     world.fixedStep(1 / 60);
     renderer.render(scene, camera);
     controls.update();
+    stats.update();
+    updateCameraMovement()
     //cannonDebugger.update() // Update the CannonDebugger meshes
     requestAnimationFrame(animate);
 
     for (var i = 0; i <= pool_balls[0].length-1; i++){
         sync_balls(pool_balls[0][i],pool_balls[1][i]);
     }
+    cuePointer.position.copy(pool_balls[1][0].position);
+    //cuePointer.quaternion.copy(pool_balls[1][0].quaternion);
 }
-
+console.log(world);
 animate();
-
-// Timeout Functions===============================================================
-
-setTimeout(function() {
-    pool_balls[1][0].applyImpulse(new CANNON.Vec3(-1, Math.random()*0.02-0.5, 0)); //Add a force to the cue ball
-
-}, 3100);
-setTimeout(function() {
-    pool_balls[1][0].applyImpulse(new CANNON.Vec3(-1, Math.random()*0.02-0.5, 0)); //Add a force to the cue ball
-
-}, 6000);
