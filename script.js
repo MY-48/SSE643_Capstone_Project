@@ -4,14 +4,14 @@
 import * as THREE from 'three'
 import * as CANNON from 'cannon-es'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { GLTFLoader } from 'three/examples/jsm/Addons.js';
+import { OBJLoader } from 'three/examples/jsm/Addons.js';
 import CannonDebugger from 'cannon-es-debugger'
 
 
 // Create top-level environments ==================================================
 const scene = new THREE.Scene();
 const world = new CANNON.World({gravity: new CANNON.Vec3(0,-9.81, 0)});
-const cannonDebugger = new CannonDebugger(scene, world, {color: 0x00ff00, scale: 1.1});
+const cannonDebugger = new CannonDebugger(scene, world, {color: 0x00ff00, scale: 1.0});
 
 // Initailize important things
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -26,6 +26,8 @@ scene.add(axesHelper);
 
 const textureLoader = new THREE.TextureLoader();
 
+const objectLoader = new OBJLoader();
+
 //Window Resize handler
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -35,6 +37,8 @@ window.addEventListener('resize', () => {
 
 //=================================================================================
 //Enviromnet Variables
+var pool_balls = [[],[]];
+
 // Constants
 const poolBallMass = 0.170; //170 grams or 6oz
 const poolBallDiameter = 0.057; //57mm or 2 1/4 inch
@@ -47,7 +51,7 @@ const groundMaterial = new CANNON.Material('ground');
 
 const ballContactMaterial = new CANNON.ContactMaterial(hardMaterial,hardMaterial,{
     contactEquationRelaxation: 2,
-    friction: 0.1,
+    friction: 0.3,
     restitution: 1
 });
 const ball_ground = new CANNON.ContactMaterial(groundMaterial, hardMaterial, {
@@ -58,6 +62,11 @@ const ball_ground = new CANNON.ContactMaterial(groundMaterial, hardMaterial, {
     frictionEquationStiffness: 1e8,
     frictionEquationRegularizationTime: 3,
 });
+
+// Add the contact materials to the world
+world.addContactMaterial(ballContactMaterial);
+world.addContactMaterial(ball_ground);
+
 //=================================================================================
 
 // Function to get image maps
@@ -84,7 +93,7 @@ function gen_pool_ball(ball){
 // Create physics object for pool balls
 function gen_phys_pool_ball(ball, rack_pos){
     var pos = new CANNON.Vec3(rack_pos[0],rack_pos[1],rack_pos[2]);//(Math.random()*0.1, Math.random()*0, Math.random()*0.1);
-    if (ball == "cue_ball") pos.set(0, poolBallDiameter, -0.8);
+    if (ball == "cue_ball") pos.set(0.8, poolBallDiameter, 0);
     const ballShape = new CANNON.Sphere(poolBallDiameter/2);
     const ballBody = new CANNON.Body({
         mass: poolBallMass,
@@ -117,7 +126,7 @@ function generatePoolBallPositions(radius) {
         for (let i = 0; i < numBalls; i++) {
             let posX = rowX;
             let posZ = rowZStart + i * radius * 2;
-            positions.push([posZ, radius, -posX]);
+            positions.push([posZ, 2, -posX]);
         }
     }
     return positions;
@@ -138,47 +147,80 @@ function shuffleArrayWithFixedIndex(array, fixedIndex) {
     }
 }
 
-// Add the contact materials to the world
-world.addContactMaterial(ballContactMaterial);
-
-const ballPositions = generatePoolBallPositions(poolBallDiameter/2);
-
-console.log("8-Ball Positions:", ballPositions);
-
-//Create Pool Balls
-if (gameType === "8-ball") { 
-    for (var i = 0; i <= 15; i++){
-        gen_pool_ball(i);
+function init_pool_balls(){
+    const ballPositions = generatePoolBallPositions(poolBallDiameter/2);
+    //console.log("8-Ball Positions:", ballPositions);
+    
+    //Create Pool Balls
+    if (gameType === "8-ball") { 
+        for (var i = 0; i <= 15; i++){
+            gen_pool_ball(i);
+        }
+        shuffleArrayWithFixedIndex(ballPositions,11);
     }
-    shuffleArrayWithFixedIndex(ballPositions,11);
-}
-else if (gameType === "9-ball") {
-    for (var i = 0; i <= 9; i++){
-        gen_pool_ball(i);
+    else if (gameType === "9-ball") {
+        for (var i = 0; i <= 9; i++){
+            gen_pool_ball(i);
+        }
     }
-}
-
-
-var pool_balls = [[],[]];
-var ind = 0;
-for (var element of scene.children){
-    if (element.name.includes("ball")){
-        pool_balls[0].push(element);
-        if (element.name.includes("cue")) gen_phys_pool_ball(element.name, [0,0,0]);
-        else {gen_phys_pool_ball(element.name, ballPositions[ind]);
-        ind++;}
+    
+    
+    var ind = 0;
+    for (var element of scene.children){
+        if (element.name.includes("ball")){
+            pool_balls[0].push(element);
+            if (element.name.includes("cue")) gen_phys_pool_ball(element.name, [0,0,0]);
+            else {gen_phys_pool_ball(element.name, ballPositions[ind]);
+            ind++;}
+        }
     }
+    for (var element of world.bodies){
+        if (element.name.includes("ball")) pool_balls[1].push(element);
+    }
+    
+    console.log(pool_balls);
 }
-for (var element of world.bodies){
-    if (element.name.includes("ball")) pool_balls[1].push(element);
-}
-
-console.log(pool_balls);
+init_pool_balls();
 
 // Pool Table======================================================================
 // Create Pool Table
+function createTrimesh(geometry) {
+    // Ensure geometry is non-indexed for simplicity
+    //const nonIndexed = geometry.toNonIndexed();
+    const vertices = geometry.attributes.position.array;
+  
+    const positions = [];
+    const indices = [];
+  
+    for (let i = 0; i < vertices.length; i += 3) {
+      positions.push(vertices[i], vertices[i + 1], vertices[i + 2]);
+      indices.push(i / 3);
+    }
+  
+    return new CANNON.Trimesh(positions, indices);
+  }
+  
 
-world.addContactMaterial(ball_ground);
+objectLoader.load('assets/pool_table/Body1.obj', (object) => {
+    scene.add(object);
+    console.log(object);
+    const mesh = object.children[0];//element; // assume first child is the mesh
+    const geometry = mesh.geometry;
+
+    // Convert to Cannon-ES shape
+    const shape = createTrimesh(geometry);
+    
+    // Create Cannon-ES body
+    const body = new CANNON.Body({
+        type: CANNON.Body.STATIC,
+        shape: shape,
+        //position: new CANNON.Vec3(0,-0.1,0),
+        material: groundMaterial      
+    });
+    tableBody.name = "Table";
+    world.addBody(body);
+});
+
 
 const tableGeo = new THREE.BoxGeometry(tableWidth,0.1,tableLength,10,10,10);
 const tableMat = new THREE.MeshStandardMaterial({color: 0x00ff00, map: textureLoader.load("assets/table_felt.jpg")});
@@ -187,7 +229,7 @@ scene.add(tableModel);
 
 const tableBody = new CANNON.Body({
     type: CANNON.Body.STATIC,
-    position: new CANNON.Vec3(0,-0.1,0),
+    position: new CANNON.Vec3(0,0.1,0),
     shape: new CANNON.Box(new CANNON.Vec3(tableWidth/2,0.05,tableLength/2)),
     material: groundMaterial
 });
@@ -203,16 +245,21 @@ camera.lookAt(0,0,0);
 
 scene.background = new THREE.Color(0x444444);
 
-const light = new THREE.AmbientLight(0xffffff, 3);
+const light = new THREE.AmbientLight(0xaaaaaa, 1);
 light.name = "AmbientLight";
 scene.add(light);
+
+const dirlight = new THREE.DirectionalLight(0xffffff, 3);
+dirlight.position.set(1,1,1);
+dirlight.name = "DirectionalLight";
+scene.add(dirlight);
 
 // Animation Loop==================================================================
 function animate() {
     world.fixedStep(1 / 60);
     renderer.render(scene, camera);
     controls.update();
-    //cannonDebugger.update() // Update the CannonDebugger meshes
+    cannonDebugger.update() // Update the CannonDebugger meshes
     requestAnimationFrame(animate);
 
     for (var i = 0; i <= pool_balls[0].length-1; i++){
@@ -223,16 +270,8 @@ function animate() {
 animate();
 
 // Timeout Functions===============================================================
-setTimeout(function() {
-    for (let i = world.bodies.length - 1; i >= 0; i--) {
-        const element = world.bodies[i];
-        if (element.name.includes("rack")) {
-            world.removeBody(element);  // Remove the body
-        }
-    }
-}, 3000);
 
 setTimeout(function() {
-    pool_balls[1][0].applyImpulse(new CANNON.Vec3(0, Math.random()*0.02-0.5, 1)); //Add a force to the cue ball
+    pool_balls[1][0].applyImpulse(new CANNON.Vec3(-1, Math.random()*0.02-0.5, 0)); //Add a force to the cue ball
 
 }, 3100);
