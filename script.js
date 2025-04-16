@@ -224,7 +224,7 @@ function createTrimesh(geometry) {
   }
   
 
-objectLoader.load('assets/pool_table/Body1.obj', (object) => {
+objectLoader.load('assets/pool_table/Body2.obj', (object) => {
     scene.add(object);
     console.log(object);
     const mesh = object.children[0];
