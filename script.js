@@ -9,6 +9,7 @@ import { OBJLoader, ThreeMFLoader } from 'three/examples/jsm/Addons.js'
 import CannonDebugger from 'cannon-es-debugger'
 import Stats from 'stats.js'
 import {Howl} from 'howler'
+import { contain } from 'three/src/extras/TextureUtils.js'
 
 // Create top-level environments ==============================================
 const scene = new THREE.Scene();
@@ -20,7 +21,7 @@ world.solver.iterations = 20;
 let aspect = window.innerWidth / window.innerHeight;
 const viewSize = 2;
 const camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
-const cameraOrth = new THREE.OrthographicCamera(viewSize * aspect / - 2, viewSize * aspect / 2, viewSize / 2, viewSize / - 2, 0.1, 200);
+const cameraOrth = new THREE.OrthographicCamera(viewSize * aspect / -2, viewSize * aspect / 2, viewSize / 2, viewSize / -2, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({antialias: true});
 renderer.shadowMap.enabled = true;
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -54,6 +55,20 @@ window.addEventListener('resize', () => {
     cameraOrth.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
+
+function genSkyBox(){
+    const skyGeo = new THREE.SphereGeometry(15,128,128);
+    const skyMat = new THREE.MeshBasicMaterial({
+        map: textureLoader.load("assets/stars.jpg"),
+        side: THREE.BackSide
+    })
+    const sky = new THREE.Mesh(skyGeo, skyMat);
+    sky.name = "sky";
+    sky.rotateOnAxis(new THREE.Vector3(0.4, 0, 0.4), Math.PI*1/4)
+    scene.add(sky);
+}
+
+genSkyBox();
 
 //=============================================================================
 // Enviromnet Variables =======================================================
@@ -367,7 +382,7 @@ for (let element of world.bodies){
             
             //Teleport to ball jail
             playSound('assets/audio/teleport.wav', 0.5); //Modify sound with Audacity to shorten
-            body.position.set(0,poolBallDiameter,0);
+            body.position.set(scene.getObjectByName("balljail").position)//(0,poolBallDiameter,0);
             body.velocity.set(0,0,0);
             body.angularVelocity.set(0, 0, 0);
             body.inertia.set(0,0,0);
@@ -382,6 +397,31 @@ for (let element of world.bodies){
     }
 };
 
+// Ball Container =============================================================
+function init_ball_container(){
+    var containerGroup = new THREE.Group();
+    const glassGeo = new THREE.CapsuleGeometry(poolBallDiameter*5/2,poolBallDiameter*5,10,16)//new THREE.CylinderGeometry(poolBallDiameter*5/2, poolBallDiameter*5/2, poolBallDiameter*5);
+    const glassMat = new THREE.MeshPhysicalMaterial({
+        color: 0xf2eee0,
+        metalness: 0,
+        roughness: 0,
+        clearcoat: 1,
+        clearcoatRoughness: 0,
+        opacity: 1,
+        transmission: 1,
+        ior: 10,
+        reflectivity: 1,
+        });
+    const glassWall = new THREE.Mesh(glassGeo, glassMat)
+    containerGroup.add(glassWall);
+    containerGroup.position.set(-0.75, 0.4, -0.75)
+    containerGroup.name = "balljail"
+    scene.add(containerGroup);
+    
+    
+}
+init_ball_container();
+
 // Mini Sun Overhead Light Model===============================================
 const sunGeo = new THREE.SphereGeometry(0.2);
 const sunMap = textureLoader.load("assets/sun.jpg");
@@ -393,6 +433,7 @@ const sunMat = new THREE.MeshStandardMaterial({
     emissiveMap: sunMap
 })
 const overheadSun = new THREE.Mesh(sunGeo, sunMat);
+overheadSun.name = "Sun"
 
 // Set camera & Lighting=======================================================
 camera.position.set(0,2,1);
@@ -412,7 +453,7 @@ miniSunLight.position.set(0.5588,1,0);
 miniSunLight.name = "DirectionalLight";
 miniSunLight.add(overheadSun);
 scene.add(miniSunLight);
-console.log(miniSunLight)
+console.log(miniSunLight);
 
 //Shadow properties for the "sun"
 miniSunLight.castShadow = true;
@@ -431,14 +472,15 @@ miniSunLight.shadow.camera.far = 500; // default
 const material = new THREE.LineBasicMaterial({color: 0x0000ff});
 
 const points = [];
-points.push(new THREE.Vector3(0,0,0));//-0.1
-points.push(new THREE.Vector3(0,0,0.1));
+points.push(new THREE.Vector3(0,0,-0.1));//-0.1
+points.push(new THREE.Vector3(0,0,0));//0.1
 
 const geometry = new THREE.BufferGeometry().setFromPoints(points);
 
 const cuePointer = new THREE.Line(geometry, material);
 cuePointer.rotateY(Math.PI*1/2);
 scene.add(cuePointer);
+console.log(cuePointer)
 
 // Hit cue ball with specified power
 function cue_hit(power) {
@@ -467,11 +509,16 @@ var keys = {};
 window.addEventListener('keydown', (event) => {
     keys[event.code] = true
     if (event.code === "KeyV") {
-        orthoCam = !orthoCam
-        miniSunLight.traverse((child) => {if (child.isMesh) child.visible = !child.visible})
+        orthoCam = !orthoCam;
+        miniSunLight.getObjectByName("Sun").material.visible = !miniSunLight.getObjectByName("Sun").material.visible;
+        //miniSunLight.traverse((child) => {if (child.isMesh) child.visible = !child.visible})
+        //cuePointer.geometry.scale(1,1,10)
+        //cuePointer.geometry.scale(1,1,.1)
     }
 });
-window.addEventListener('keyup', (event) => keys[event.code] = false);
+window.addEventListener('keyup', (event) => {
+    keys[event.code] = false;
+});
 
 // Camera Movement Logic
 function updateCameraMovement() {
@@ -494,7 +541,7 @@ function animate() {
     for (var i = 0; i <= pool_balls[0].length-1; i++){
         sync_model(pool_balls[0][i],pool_balls[1][i]);
     }
-    
+
     //Keep impulse pointer aligned with cue ball
     cuePointer.position.copy(cueBall.position);
     //Rotate sun model
