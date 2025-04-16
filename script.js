@@ -224,7 +224,8 @@ function createTrimesh(geometry) {
   }
   
 
-objectLoader.load('assets/pool_table/Body2.obj', (object) => {
+objectLoader.load('assets/pool_table/Pool Table.obj', (object) => {
+//objectLoader.load('assets/pool_table/Pool Table Reduced Poly.obj', (object) => { //Lower Poly Option
     scene.add(object);
     console.log(object);
     const mesh = object.children[0];
