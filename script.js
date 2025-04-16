@@ -4,11 +4,11 @@
 
 import * as THREE from 'three'
 import * as CANNON from 'cannon-es'
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { OBJLoader } from 'three/examples/jsm/Addons.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { OBJLoader, ThreeMFLoader } from 'three/examples/jsm/Addons.js'
 import CannonDebugger from 'cannon-es-debugger'
 import Stats from 'stats.js'
-import {Howl} from 'howler';
+import {Howl} from 'howler'
 
 // Create top-level environments ==============================================
 const scene = new THREE.Scene();
@@ -16,16 +16,20 @@ const scene = new THREE.Scene();
 const world = new CANNON.World({gravity: new CANNON.Vec3(0,-9.81, 0)});
 world.solver.iterations = 20;
 
-// Initailize important things=================================================
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+// Initailize important things ================================================
+let aspect = window.innerWidth / window.innerHeight;
+const viewSize = 2;
+const camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
+const cameraOrth = new THREE.OrthographicCamera(viewSize * aspect / - 2, viewSize * aspect / 2, viewSize / 2, viewSize / - 2, 0.1, 200);
+const renderer = new THREE.WebGLRenderer({antialias: true});
+renderer.shadowMap.enabled = true;
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 
 // Debugging Helpers ==========================================================
+
 const axesHelper = new THREE.AxesHelper(5);
 scene.add(axesHelper);
 
@@ -34,39 +38,34 @@ const cannonDebugger = new CannonDebugger(scene, world, {color: 0x00ff00, scale:
 const stats = new Stats();
 document.body.appendChild(stats.dom);
 
-// Loaders=====================================================================
+// Loaders ====================================================================
 const textureLoader = new THREE.TextureLoader();
 const objectLoader = new OBJLoader();
-const audioLoader = new THREE.AudioLoader();
-
-// Audio Engine================================================================
-//const listener = new THREE.AudioListener();
-//camera.add(listener);
-//function playSound(path, volume){
-//    const newSound = new THREE.Audio(listener);
-//    audioLoader.load(path), function(buffer){
-//        newSound.setBuffer(buffer);
-//        newSound.setVolume(volume);    
-//    }
-//}
 
 //Window Resize handler
 window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
+    aspect = window.innerWidth / window.innerHeight;
+    camera.aspect = aspect;
+    cameraOrth.left = viewSize * aspect / -2;
+    cameraOrth.right = viewSize * aspect / 2;
+    cameraOrth.top = viewSize / 2;
+    cameraOrth.bottom = viewSize / -2;
     camera.updateProjectionMatrix();
+    cameraOrth.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
 //=============================================================================
-//Enviromnet Variables
+// Enviromnet Variables =======================================================
+var orthoCam = false;
 var pool_balls = [[],[]];
+var gameType = "8-ball";
 
 // Constants
 const poolBallMass = 0.170; //170 grams or 6oz
 const poolBallDiameter = 0.057; //57mm or 2 1/4 inch
-var tableLength = 2.24; //224cm or 88inch
-var tableWidth = tableLength/2; //112cm or 44inch
-var gameType = "8-ball"
+const tableLength = 2.24; //224cm or 88inch
+const tableWidth = tableLength/2; //112cm or 44inch
 
 const ballMaterial = new CANNON.Material("ball");
 const groundMaterial = new CANNON.Material("ground");
@@ -91,6 +90,8 @@ world.addContactMaterial(ballContactMaterial);
 world.addContactMaterial(ball_ground);
 world.addContactMaterial(ball_bumper);
 
+const powerRange = [];
+//=============================================================================
 //=============================================================================
 
 // Function to get image maps
@@ -100,7 +101,7 @@ function getTexture(index) {
     return texture;
 }
 
-// Pool Balls==================================================================
+// Pool Balls =================================================================
 // Function to create pool ball meshes
 function gen_pool_ball(ball){
     const ballGeo = new THREE.SphereGeometry(poolBallDiameter/2,32,32);
@@ -111,6 +112,8 @@ function gen_pool_ball(ball){
     const ballModel = new THREE.Mesh(ballGeo, ballMat);
     ballModel.name = ball.toString() + "_ball";
     if (ball == 0) ballModel.name = "cue_ball";
+    ballModel.castShadow = true;
+    ballModel.receiveShadow = true;
     scene.add(ballModel);
 }
 
@@ -128,22 +131,23 @@ function gen_phys_pool_ball(ball, rack_pos){
         material: ballMaterial
     });
     ballBody.name = ball;
+    ballBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0,1,0),Math.PI*-1/2);
     world.addBody(ballBody);
 }
 
-// Sync pool ball positions
+// Sync mesh and body positions
 function sync_model(model, cannonBody){
     model.position.copy(cannonBody.position);
     model.quaternion.copy(cannonBody.quaternion);
 }
 
-// generatePoolBallPositions FUNCTION
+// Generate pool ball position array
 function generatePoolBallPositions(radius) {
     const positions = [];
-    let startX = 0; // The frontmost ball position
+    let startX = 0; // frontmost ball position
     let rows = 5;
     for (let row = 0; row < rows; row++) {
-        let numBalls = row + 1; // 1, 2, 3, 4, 5
+        let numBalls = row + 1;
         let rowX = startX - row * radius * 2 * Math.sin(Math.PI / 3);
         let rowZStart = -((numBalls - 1) * radius * 2) / 2;
 
@@ -159,18 +163,19 @@ function generatePoolBallPositions(radius) {
 // Randomize array in-place using Durstenfeld shuffle algorithm
 function shuffleArrayWithFixedIndex(array, fixedIndex) {
     for (let i = array.length - 1; i > 0; i--) {
-        if (i === fixedIndex) continue;
+        if (i == fixedIndex-1) continue;
 
         let j;
         do {
             j = Math.floor(Math.random() * (i + 1));
-        } while (j === fixedIndex); // Ensure j is not the fixed index
+        } while (j == fixedIndex-1); // Ensure j is not the fixed index
 
         // Swap elements
         [array[i], array[j]] = [array[j], array[i]];
     }
 }
 
+// Initialization sequence for creating and placing pool balls
 function init_pool_balls(){
     const ballPositions = generatePoolBallPositions(poolBallDiameter/2);
     //console.log("8-Ball Positions:", ballPositions);
@@ -180,36 +185,41 @@ function init_pool_balls(){
         for (var i = 0; i <= 15; i++){
             gen_pool_ball(i);
         }
-        shuffleArrayWithFixedIndex(ballPositions,1);
+        shuffleArrayWithFixedIndex(ballPositions,5);
+
     }
-    else if (gameType === "9-ball") {
+    else if (gameTypse === "9-ball") {
         for (var i = 0; i <= 9; i++){
             gen_pool_ball(i);
         }
     }
     
-    var ind = 0;
+    let idx = 0;
     for (var element of scene.children){
         if (element.name.includes("ball")){
             pool_balls[0].push(element);
             if (element.name.includes("cue")) gen_phys_pool_ball(element.name, [0,0,0]);
-            else {gen_phys_pool_ball(element.name, ballPositions[ind]);
-            ind++;}
+            else {gen_phys_pool_ball(element.name, ballPositions[idx]);
+            idx++;}
         }
     }
     for (var element of world.bodies){
         if (element.name.includes("ball")) pool_balls[1].push(element);
     }
-    
+    //swap 8 ball into correct position
+    let tempPosition = structuredClone(pool_balls[1][8].position);
+    pool_balls[1][8].position.copy(pool_balls[1][5].position);
+    pool_balls[1][5].position.copy(tempPosition);
     console.log(pool_balls);
 }
+
 init_pool_balls();
+const cueBall = pool_balls[1][0]; // Global name for the cue ball
 
 // Pool Table==================================================================
 // Create Pool Table
 function createTrimesh(geometry) {
-    // Ensure geometry is non-indexed for simplicity
-    //const nonIndexed = geometry.toNonIndexed();
+    const nonIndexed = geometry.toNonIndexed();
     const vertices = geometry.attributes.position.array;
   
     const positions = [];
@@ -227,7 +237,50 @@ function createTrimesh(geometry) {
 objectLoader.load('assets/pool_table/Pool Table.obj', (object) => {
 //objectLoader.load('assets/pool_table/Pool Table Reduced Poly.obj', (object) => { //Lower Poly Option
     scene.add(object);
-    console.log(object);
+    //console.log(object);
+    // Load texture
+    const texture = textureLoader.load(
+        'assets/table_felt.jpg',
+        () => //console.log('Texture loaded'),
+        undefined,
+        (err) => console.error('Texture load error:', err)
+    );
+
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(1, 1); // You can tweak this if it looks stretched
+
+    // Create standard material with texture
+    const material = new THREE.MeshStandardMaterial({
+        map: texture,
+        roughness: 0.4,
+        metalness: 0.1,
+    });
+
+    // Traverse and override material only on visible meshes with UVs
+    object.traverse((child) => {
+        if (child.isMesh) {
+            if (child.geometry.attributes.uv) {
+                child.material = material;
+            } else {
+                console.warn(`Mesh "${child.name}" has no UVs`);
+            }
+
+            child.castShadow = true;
+            child.receiveShadow = true;
+        }
+    });
+    //const texture = textureLoader.load("assets/wood_texture.jpg");
+    //const material = new THREE.MeshStandardMaterial({color: 0x964B00, map: textureLoader.load("assets/wood_texture.jpg") });
+//
+    //object.traverse((child) => {
+    //    if (child.isMesh) {
+    //        child.material = material; // Apply new material to all meshes
+    //        child.castShadow = true;
+    //        child.receiveShadow = true;
+    //    }
+    //});
+
     const mesh = object.children[0];
     const geometry = mesh.geometry;
 
@@ -249,6 +302,9 @@ objectLoader.load('assets/pool_table/Pool Table.obj', (object) => {
 const tableGeo = new THREE.BoxGeometry(tableWidth,0.005*2,tableLength,10,10,10);
 const tableMat = new THREE.MeshStandardMaterial({color: 0x00ff00, map: textureLoader.load("assets/table_felt.jpg")});
 const tableModel = new THREE.Mesh(tableGeo, tableMat);
+tableModel.castShadow = false;
+tableModel.receiveShadow = true;
+tableModel.name = "TableTop";
 scene.add(tableModel);
 
 const tableTop = new CANNON.Body({
@@ -263,18 +319,28 @@ tableTop.name = "TableTop";
 world.addBody(tableTop);
 sync_model(tableModel, tableTop)
 
+// Pool Table Holes ===========================================================
+const holeGeo = new THREE.CylinderGeometry(poolBallDiameter*1.9,poolBallDiameter*1.9,0,10);
+const holeMat = new THREE.MeshLambertMaterial({
+    color: 0xffffff,
+    map: textureLoader.load("assets/portal.png"),
+})
+
 var holeX = -0.57;
 var holeZ = -0.6;
 for (var i=0; i<6;i++){
-    console.log(holeX+ " : "+ holeZ);
+    //console.log(holeX+ " : "+ holeZ);
     const holeShape = new CANNON.Cylinder(poolBallDiameter*2,poolBallDiameter*2,0,10);//bumperPosRot[i][0]),
     const holeBody = new CANNON.Body({
         type: CANNON.Body.STATIC,
         shape: holeShape,
     });
-    holeBody.position.set(holeX,-0.1,holeZ);
+    holeBody.position.set(holeX,-0.09,holeZ);
     holeBody.name = "Hole"+(i+1);
     world.addBody(holeBody);
+    const holePortal = new THREE.Mesh(holeGeo, holeMat);
+    holePortal.name = "Hole"+(i+1);
+    scene.add(holePortal)
     if (i == 5) break;
     if (i == 2) holeZ = 0.6;
     if (i < 2) holeX += 0.57*2;
@@ -284,12 +350,13 @@ for (var i=0; i<6;i++){
 function playSound(path, volume){
     var sound = new Howl({
         src: [path],
-        volume: volume,
+        volume: volume
     })
     sound.play()
 }
 
 // Hole Collision Detection
+let idx = 1;
 for (let element of world.bodies){
     if (element.name.includes("Hole")){
         element.addEventListener('collide', (event) => {
@@ -306,11 +373,33 @@ for (let element of world.bodies){
             body.inertia.set(0,0,0);
         });
     };
+
+    // Add a portal mesh to each hole
+    if (element.name == ("Hole"+idx)) {
+        sync_model(scene.getObjectByName("Hole"+idx), element);
+        //console.log(scene.getObjectByName("Hole"+idx));
+        idx +=1;
+    }
 };
 
+// Mini Sun Overhead Light Model===============================================
+const sunGeo = new THREE.SphereGeometry(0.2);
+const sunMap = textureLoader.load("assets/sun.jpg");
+const sunMat = new THREE.MeshStandardMaterial({
+    color: 0xFCB000,
+    map: sunMap,
+    emissiveIntensity: 1,
+    emissive: 0xffffff,
+    emissiveMap: sunMap
+})
+const overheadSun = new THREE.Mesh(sunGeo, sunMat);
+
 // Set camera & Lighting=======================================================
-camera.position.set(0,1,0);
-camera.lookAt(0,0,0);
+camera.position.set(0,2,1);
+
+cameraOrth.position.set(0,2,0);
+cameraOrth.position.x += 0.5588;
+cameraOrth.lookAt(0.5588,0,0);
 
 scene.background = new THREE.Color(0x444444);
 
@@ -318,78 +407,84 @@ const light = new THREE.AmbientLight(0xaaaaaa, 1);
 light.name = "AmbientLight";
 scene.add(light);
 
-const dirlight = new THREE.DirectionalLight(0xffffff, 3);
-dirlight.position.set(1,1,1);
-dirlight.name = "DirectionalLight";
-scene.add(dirlight);
+const miniSunLight = new THREE.PointLight(0xffffff, 3);
+miniSunLight.position.set(0.5588,1,0);
+miniSunLight.name = "DirectionalLight";
+miniSunLight.add(overheadSun);
+scene.add(miniSunLight);
+console.log(miniSunLight)
 
+//Shadow properties for the "sun"
+miniSunLight.castShadow = true;
+miniSunLight.shadow.mapSize.width = 4096; // default
+miniSunLight.shadow.mapSize.height = 4096; // default
+miniSunLight.shadow.camera.near = 0.5; // default
+miniSunLight.shadow.camera.far = 500; // default
 
 // Timeout Functions===========================================================
 
-setTimeout(function() {
+//setTimeout(function() {
     //pool_balls[1][0].position.set(-0.57,0,-0.6);
-    pool_balls[1][0].applyImpulse(new CANNON.Vec3(-1, 0, (Math.random()-0.5)*.1)); //Add a force to the cue ball
-    setInterval(function() {
-        pool_balls[1][0].applyImpulse(new CANNON.Vec3(Math.random()-0.5, 0, Math.random()-0.5)); //Add a force to the cue ball
-        pool_balls[1][8].applyImpulse(new CANNON.Vec3(Math.random()-0.5, 0, Math.random()-0.5)); //Add a force to the cue ball
-        pool_balls[1][15].applyImpulse(new CANNON.Vec3(Math.random()-0.5, 0, Math.random()-0.5)); //Add a force to the cue ball
-    }, 2000);    
-}, 2000);
+//}, 1000);
 
 // Game Logic==================================================================
-const material = new THREE.LineBasicMaterial({
-	color: 0x0000ff
-});
+const material = new THREE.LineBasicMaterial({color: 0x0000ff});
 
 const points = [];
-points.push( new THREE.Vector3( -0.1, 0, 0 ) );
-points.push( new THREE.Vector3( 0, 0, 0 ) );
+points.push(new THREE.Vector3(0,0,0));//-0.1
+points.push(new THREE.Vector3(0,0,0.1));
 
-const geometry = new THREE.BufferGeometry().setFromPoints( points );
+const geometry = new THREE.BufferGeometry().setFromPoints(points);
 
-const cuePointer = new THREE.Line( geometry, material );
-scene.add( cuePointer );
+const cuePointer = new THREE.Line(geometry, material);
+cuePointer.rotateY(Math.PI*1/2);
+scene.add(cuePointer);
 
-function cue_hit(){
-    console.log(cuePointer.rotation.y.toString());
-    console.log(cuePointer.rotation);
-    var x = Math.sin(cuePointer.rotation.y) *0.25;
-    var z = Math.cos(cuePointer.rotation.y) *0.25;
-    pool_balls[1][0].applyImpulse(new CANNON.Vec3(z,0,x));
+// Hit cue ball with specified power
+function cue_hit(power) {
+    // Create a direction vector pointing forward in local space (negative Z is "forward" in Three.js)
+    const direction = new THREE.Vector3(0, 0, -1); 
+    
+    // Convert this direction into world space using cuePointerHolder's orientation
+    direction.applyEuler(cuePointer.rotation); 
+    
+    // Optionally normalize and scale it to get the desired impulse strength
+    direction.normalize().multiplyScalar(power); // Adjust the scalar for power
+
+    // Apply impulse in Cannon.js (convert THREE.Vector3 to CANNON.Vec3)
+    const impulse = new CANNON.Vec3(direction.x, 0, direction.z);
+    cueBall.applyImpulse(impulse);
 }
 
-//const cueBall = pool_balls[1][0]; // CANNON.Body
-//const cuePosition = cueBall.position.clone(); // Vec3
-//const lineEnd = new CANNON.Vec3(x, y, z); // Target point on table
-//
-//// 1. Get direction vector (from cue ball *away from line end*)
-//const direction = cuePosition.vsub(lineEnd); // pointing "back" from target
-//direction.normalize();
-//
-//// 2. Scale by desired force
-//const force = direction.scale(impulseStrength); // e.g., 5 or 10
-//
-//// 3. Apply impulse to the cue ball
-//cueBall.applyImpulse(force, cueBall.position);
+// Cue Ball placing sequence for break or scratch
+function placeCueBall(){
+
+}
 
 // ============================================================================
 var keys = {};
 // Event Listeners for Key Presses
-window.addEventListener('keydown', (event) => keys[event.code] = true);
+window.addEventListener('keydown', (event) => {
+    keys[event.code] = true
+    if (event.code === "KeyV") {
+        orthoCam = !orthoCam
+        miniSunLight.traverse((child) => {if (child.isMesh) child.visible = !child.visible})
+    }
+});
 window.addEventListener('keyup', (event) => keys[event.code] = false);
 
 // Camera Movement Logic
 function updateCameraMovement() {
-    if (keys["KeyA"]) cuePointer.rotateY(0.1);  // aim left
-    if (keys["KeyD"]) cuePointer.rotateY(-0.1);  // aim right
-    if (keys["KeyW"]) cueBall.applyImpulse(force, cueBall.position);
+    if (keys["KeyA"]) cuePointer.rotateY(0.05);  // aim left
+    if (keys["KeyD"]) cuePointer.rotateY(-0.05);  // aim right
+    if (keys["Space"]) cue_hit(0.1);//cueBall.applyImpulse(force, cueBall.position);
 }
 
 // ============================================================================
 // Animation Loop==============================================================
 function animate() {
     world.fixedStep(1 / 60);
-    renderer.render(scene, camera);
+    renderer.render(scene, orthoCam ? cameraOrth : camera);
     controls.update();
     stats.update();
     updateCameraMovement()
@@ -399,8 +494,15 @@ function animate() {
     for (var i = 0; i <= pool_balls[0].length-1; i++){
         sync_model(pool_balls[0][i],pool_balls[1][i]);
     }
-    cuePointer.position.copy(pool_balls[1][0].position);
-    //cuePointer.quaternion.copy(pool_balls[1][0].quaternion);
+    
+    //Keep impulse pointer aligned with cue ball
+    cuePointer.position.copy(cueBall.position);
+    //Rotate sun model
+    miniSunLight.rotateY(0.003)
+    //Rotate portals
+    for (let i = 1; i <7; i++) scene.getObjectByName("Hole"+i).rotateY(0.05);
 }
+
+console.log(scene);
 console.log(world);
 animate();
