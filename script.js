@@ -132,7 +132,7 @@ function gen_phys_pool_ball(ball, rack_pos){
 }
 
 // Sync pool ball positions
-function sync_balls(model, cannonBody){
+function sync_model(model, cannonBody){
     model.position.copy(cannonBody.position);
     model.quaternion.copy(cannonBody.quaternion);
 }
@@ -244,45 +244,41 @@ objectLoader.load('assets/pool_table/Body1.obj', (object) => {
     world.addBody(body); //See about making the mesh simpler for better performance
 });
 
-/*
-const tableGeo = new THREE.BoxGeometry(tableWidth,0.1,tableLength,10,10,10);
+
+const tableGeo = new THREE.BoxGeometry(tableWidth,0.005*2,tableLength,10,10,10);
 const tableMat = new THREE.MeshStandardMaterial({color: 0x00ff00, map: textureLoader.load("assets/table_felt.jpg")});
 const tableModel = new THREE.Mesh(tableGeo, tableMat);
 scene.add(tableModel);
-*/
+
 const tableTop = new CANNON.Body({
     type: CANNON.Body.STATIC,
     shape: new CANNON.Box(new CANNON.Vec3(tableWidth/2,0.005,tableLength/2)),
-    position: new CANNON.Vec3(0.5588,-0.005/2,0),
+    position: new CANNON.Vec3(0.5588,-0.005,0),
     quaternion: new CANNON.Quaternion(0,0,0,0),
     material: groundMaterial
 });
 tableTop.quaternion.setFromAxisAngle(new CANNON.Vec3(0,1,0),Math.PI*1/2);
 tableTop.name = "TableTop";
 world.addBody(tableTop);
+sync_model(tableModel, tableTop)
 
-var x = -0.57;
-var z = -0.6;
+var holeX = -0.57;
+var holeZ = -0.6;
 for (var i=0; i<6;i++){
-    console.log(x+ " : "+ z);
+    console.log(holeX+ " : "+ holeZ);
     const holeShape = new CANNON.Cylinder(poolBallDiameter*2,poolBallDiameter*2,0,10);//bumperPosRot[i][0]),
     const holeBody = new CANNON.Body({
         type: CANNON.Body.STATIC,
         shape: holeShape,
     });
-    holeBody.position.set(x,-0.1,z);
-    holeBody.name = "Hole"+i;
+    holeBody.position.set(holeX,-0.1,holeZ);
+    holeBody.name = "Hole"+(i+1);
     world.addBody(holeBody);
     if (i == 5) break;
-    if (i == 2) z = 0.6;
-    if (i < 2) x += 0.57*2;
-    else if (i > 2) x -= 0.57*2;
+    if (i == 2) holeZ = 0.6;
+    if (i < 2) holeX += 0.57*2;
+    else if (i > 2) holeX -= 0.57*2;
 }
-
-//const clickSound = new Audio('assets/pool-ball-sound-effect.wav');
-//document.addEventListener('click', () => {
-//  clickSound.play();
-//});
 
 function playSound(path, volume){
     var sound = new Howl({
@@ -292,42 +288,25 @@ function playSound(path, volume){
     sound.play()
 }
 
-for (var element of world.bodies){
+// Hole Collision Detection
+for (let element of world.bodies){
     if (element.name.includes("Hole")){
         element.addEventListener('collide', (event) => {
             const { body, contact } = event;
-            console.log(`Collision detected between bodyA and body id: ${body.id}`);
+            console.log(`Collision detected between hole: ${element.name} and body id: ${body.name}`);
             console.log('Contact point:', contact.contactPointA);
             console.log('Contact normal:', contact.ni);
-            //playSound('assets/pool-ball-sound-effect.wav', 1); //Modify sound with Audacity to shorten
+            
             //Teleport to ball jail
-            body.position.set(0,-0.05,0);
-          });
-          
-    }
-}
+            playSound('assets/audio/teleport.wav', 0.5); //Modify sound with Audacity to shorten
+            body.position.set(0,poolBallDiameter,0);
+            body.velocity.set(0,0,0);
+            body.angularVelocity.set(0, 0, 0);
+            body.inertia.set(0,0,0);
+        });
+    };
+};
 
-/*
-const bumperPosRot = [[new CANNON.Vec3(0.5588*2,poolBallDiameter/2,0.05)], //end shape, side length
-                      [new CANNON.Vec3(-0.5588,0.1,0)], //positions
-                      [new CANNON.Vec3(-0.5588,-0.005/2,0)]]; //rotation
-
-for (var i=0; i<6;i++){
-    const bumperShape = new CANNON.Box(new CANNON.Vec3(0.535-poolBallDiameter,poolBallDiameter/2,0.005));//bumperPosRot[i][0]),
-    const bumperSides = new CANNON.Box(new CANNON.Vec3(0.535-poolBallDiameter,poolBallDiameter/2,0.005));
-    const tableBumper = new CANNON.Body({
-        type: CANNON.Body.STATIC,
-        shape: bumperShape,
-        //position: new CANNON.Vec3(bumperPosRot[1][0]),
-        //quaternion: new CANNON.Quaternion(0,0,0,0),
-        material: bumperMaterial
-    });
-    tableBumper.position.set(-(0.5588+bumperShape.halfExtents.z),bumperShape.halfExtents.y,0);
-    tableBumper.quaternion.setFromAxisAngle(new CANNON.Vec3(0,1,0),Math.PI*1/2);
-    tableBumper.name = "TableBumper"+i;
-    world.addBody(tableBumper);
-}
-*/
 // Set camera & Lighting=======================================================
 camera.position.set(0,1,0);
 camera.lookAt(0,0,0);
@@ -348,14 +327,13 @@ scene.add(dirlight);
 
 setTimeout(function() {
     //pool_balls[1][0].position.set(-0.57,0,-0.6);
-    //pool_balls[1][0].applyImpulse(new CANNON.Vec3(-1, 0, (Math.random()-0.5)*.1)); //Add a force to the cue ball
-
+    pool_balls[1][0].applyImpulse(new CANNON.Vec3(-1, 0, (Math.random()-0.5)*.1)); //Add a force to the cue ball
+    setInterval(function() {
+        pool_balls[1][0].applyImpulse(new CANNON.Vec3(Math.random()-0.5, 0, Math.random()-0.5)); //Add a force to the cue ball
+        pool_balls[1][8].applyImpulse(new CANNON.Vec3(Math.random()-0.5, 0, Math.random()-0.5)); //Add a force to the cue ball
+        pool_balls[1][15].applyImpulse(new CANNON.Vec3(Math.random()-0.5, 0, Math.random()-0.5)); //Add a force to the cue ball
+    }, 2000);    
 }, 2000);
-
-setInterval(function() {
-    //pool_balls[1][0].applyImpulse(new CANNON.Vec3(Math.random()-0.5, 0, Math.random()-0.5)); //Add a force to the cue ball
-
-}, 6000);
 
 // Game Logic==================================================================
 const material = new THREE.LineBasicMaterial({
@@ -372,28 +350,28 @@ const cuePointer = new THREE.Line( geometry, material );
 scene.add( cuePointer );
 
 function cue_hit(){
-    console.log(cuePointer.rotation.y.toString())
-    console.log(cuePointer.rotation)
-    var x = Math.sin(cuePointer.rotation.y) *0.25
-    var z = Math.cos(cuePointer.rotation.y) *0.25
+    console.log(cuePointer.rotation.y.toString());
+    console.log(cuePointer.rotation);
+    var x = Math.sin(cuePointer.rotation.y) *0.25;
+    var z = Math.cos(cuePointer.rotation.y) *0.25;
     pool_balls[1][0].applyImpulse(new CANNON.Vec3(z,0,x));
 }
 
-const cueBall = pool_balls[1][0]; // CANNON.Body
-const cuePosition = cueBall.position.clone(); // Vec3
-const lineEnd = new CANNON.Vec3(x, y, z); // Target point on table
+//const cueBall = pool_balls[1][0]; // CANNON.Body
+//const cuePosition = cueBall.position.clone(); // Vec3
+//const lineEnd = new CANNON.Vec3(x, y, z); // Target point on table
+//
+//// 1. Get direction vector (from cue ball *away from line end*)
+//const direction = cuePosition.vsub(lineEnd); // pointing "back" from target
+//direction.normalize();
+//
+//// 2. Scale by desired force
+//const force = direction.scale(impulseStrength); // e.g., 5 or 10
+//
+//// 3. Apply impulse to the cue ball
+//cueBall.applyImpulse(force, cueBall.position);
 
-// 1. Get direction vector (from cue ball *away from line end*)
-const direction = cuePosition.vsub(lineEnd); // pointing "back" from target
-direction.normalize();
-
-// 2. Scale by desired force
-const force = direction.scale(impulseStrength); // e.g., 5 or 10
-
-// 3. Apply impulse to the cue ball
-cueBall.applyImpulse(force, cueBall.position);
-
-//=============================
+// ============================================================================
 var keys = {};
 // Event Listeners for Key Presses
 window.addEventListener('keydown', (event) => keys[event.code] = true);
@@ -403,9 +381,8 @@ window.addEventListener('keyup', (event) => keys[event.code] = false);
 function updateCameraMovement() {
     if (keys["KeyA"]) cuePointer.rotateY(0.1);  // aim left
     if (keys["KeyD"]) cuePointer.rotateY(-0.1);  // aim right
-    if (keys["KeyW"]) cueBall.applyImpulse(force, cueBall.position);;
+    if (keys["KeyW"]) cueBall.applyImpulse(force, cueBall.position);
 }
-
 
 // ============================================================================
 // Animation Loop==============================================================
@@ -419,7 +396,7 @@ function animate() {
     requestAnimationFrame(animate);
 
     for (var i = 0; i <= pool_balls[0].length-1; i++){
-        sync_balls(pool_balls[0][i],pool_balls[1][i]);
+        sync_model(pool_balls[0][i],pool_balls[1][i]);
     }
     cuePointer.position.copy(pool_balls[1][0].position);
     //cuePointer.quaternion.copy(pool_balls[1][0].quaternion);
