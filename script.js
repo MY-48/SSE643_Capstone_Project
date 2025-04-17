@@ -5,10 +5,11 @@
 import * as THREE from 'three'
 import * as CANNON from 'cannon-es'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { OBJLoader, ThreeMFLoader } from 'three/examples/jsm/Addons.js'
+import { OBJLoader , GLTFLoader} from 'three/examples/jsm/Addons.js'
 import CannonDebugger from 'cannon-es-debugger'
 import Stats from 'stats.js'
 import {Howl} from 'howler'
+import { element, step, texture } from 'three/tsl'
 
 // Create top-level environments ==============================================
 const scene = new THREE.Scene();
@@ -36,11 +37,12 @@ scene.add(axesHelper);
 const cannonDebugger = new CannonDebugger(scene, world, {color: 0x00ff00, scale: 1.0});
 
 const stats = new Stats();
-document.body.appendChild(stats.dom);
+//document.body.appendChild(stats.dom);
 
 // Loaders ====================================================================
 const textureLoader = new THREE.TextureLoader();
 const objectLoader = new OBJLoader();
+const gltfLoader = new GLTFLoader();
 
 //Window Resize handler
 window.addEventListener('resize', () => {
@@ -55,25 +57,13 @@ window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-function genSkyBox(){
-    const skyGeo = new THREE.SphereGeometry(15,128,128);
-    const skyMat = new THREE.MeshBasicMaterial({
-        map: textureLoader.load("assets/stars.jpg"),
-        side: THREE.BackSide
-    })
-    const sky = new THREE.Mesh(skyGeo, skyMat);
-    sky.name = "sky";
-    sky.rotateOnAxis(new THREE.Vector3(0.4, 0, 0.4), Math.PI*1/4)
-    scene.add(sky);
-}
-
-genSkyBox();
-
 //=============================================================================
 // Enviromnet Variables =======================================================
 var orthoCam = false;
 var pool_balls = [[],[]];
 var gameType = "8-ball";
+var playerCount = 1; //single player default
+
 
 // Constants
 const poolBallMass = 0.170; //170 grams or 6oz
@@ -108,11 +98,63 @@ const powerRange = [];
 //=============================================================================
 //=============================================================================
 
+// Set camera & Lighting=======================================================
+camera.position.set(0,2,1);
+
+cameraOrth.position.set(0,2,0);
+cameraOrth.position.x += 0.5588;
+cameraOrth.lookAt(0.5588,0,0);
+
+scene.background = new THREE.Color(0x444444);
+genSky();
+
+const light = new THREE.AmbientLight(0xaaaaaa, 1);
+light.name = "AmbientLight";
+scene.add(light);
+
+const miniSunLight = new THREE.PointLight(0xffffff, 3);
+miniSunLight.name = "DirectionalLight";
+
+const portalColor = new THREE.Color(0x00ffff);
+const portalLight = new THREE.PointLight(portalColor, 1, 1, 0.5);
+
+
+//Shadow properties for the "sun"
+miniSunLight.castShadow = true;
+miniSunLight.shadow.mapSize.width = 4096; // default
+miniSunLight.shadow.mapSize.height = 4096; // default
+miniSunLight.shadow.camera.near = 0.5; // default
+miniSunLight.shadow.camera.far = 500; // default
+
+function genSky(){
+    const skyGeo = new THREE.SphereGeometry(15,128,128);
+    const skyMat = new THREE.MeshBasicMaterial({
+        map: textureLoader.load("assets/stars.jpg"),
+        side: THREE.BackSide
+    })
+    const sky = new THREE.Mesh(skyGeo, skyMat);
+    sky.name = "sky";
+    sky.rotateOnAxis(new THREE.Vector3(0.4, 0, 0.4), Math.PI*1/4)
+    scene.add(sky);
+}
+
+//=============================================================================
+//=============================================================================
+
 // Function to get image maps
 function getTexture(index) {
     var file_path = "assets/pool_balls/texture_"+index+".png";
     const texture = textureLoader.load(file_path);  // Make sure the path is correct
     return texture;
+}
+
+// Play a sound
+function playSound(path, volume){
+    var sound = new Howl({
+        src: [path],
+        volume: volume
+    })
+    sound.play()
 }
 
 // Pool Balls =================================================================
@@ -251,15 +293,9 @@ function createTrimesh(geometry) {
 objectLoader.load('assets/pool_table/Pool Table.obj', (object) => {
 //objectLoader.load('assets/pool_table/Pool Table Reduced Poly.obj', (object) => { //Lower Poly Option
     scene.add(object);
-    //console.log(object);
+    console.log(object);
     // Load texture
-    const texture = textureLoader.load(
-        'assets/table_felt.jpg',
-        () => //console.log('Texture loaded'),
-        undefined,
-        (err) => console.error('Texture load error:', err)
-    );
-
+    const texture = textureLoader.load('assets/table_felt.jpg');
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(1, 1); // You can tweak this if it looks stretched
@@ -270,30 +306,7 @@ objectLoader.load('assets/pool_table/Pool Table.obj', (object) => {
         roughness: 0.4,
         metalness: 0.1,
     });
-
-    // Traverse and override material only on visible meshes with UVs
-    object.traverse((child) => {
-        if (child.isMesh) {
-            if (child.geometry.attributes.uv) {
-                child.material = material;
-            } else {
-                console.warn(`Mesh "${child.name}" has no UVs`);
-            }
-
-            child.castShadow = true;
-            child.receiveShadow = true;
-        }
-    });
-    //const texture = textureLoader.load("assets/wood_texture.jpg");
-    //const material = new THREE.MeshStandardMaterial({color: 0x964B00, map: textureLoader.load("assets/wood_texture.jpg") });
-//
-    //object.traverse((child) => {
-    //    if (child.isMesh) {
-    //        child.material = material; // Apply new material to all meshes
-    //        child.castShadow = true;
-    //        child.receiveShadow = true;
-    //    }
-    //});
+    object.children[0].material = material
 
     const mesh = object.children[0];
     const geometry = mesh.geometry;
@@ -314,7 +327,7 @@ objectLoader.load('assets/pool_table/Pool Table.obj', (object) => {
 
 
 const tableGeo = new THREE.BoxGeometry(tableWidth,0.005*2,tableLength,10,10,10);
-const tableMat = new THREE.MeshStandardMaterial({color: 0x00ff00, map: textureLoader.load("assets/table_felt.jpg")});
+const tableMat = new THREE.MeshStandardMaterial({color: 0x00ffff, map: textureLoader.load("assets/table_felt.jpg")});
 const tableModel = new THREE.Mesh(tableGeo, tableMat);
 tableModel.castShadow = false;
 tableModel.receiveShadow = true;
@@ -335,9 +348,13 @@ sync_model(tableModel, tableTop)
 
 // Pool Table Holes ===========================================================
 const holeGeo = new THREE.CylinderGeometry(poolBallDiameter*1.9,poolBallDiameter*1.9,0,10);
-const holeMat = new THREE.MeshLambertMaterial({
+let portaltexture = textureLoader.load("assets/portal.png");
+const holeMat = new THREE.MeshPhongMaterial({
     color: 0xffffff,
-    map: textureLoader.load("assets/portal.png"),
+    emissive: portalColor,
+    emissiveIntensity: 1,
+    emissiveMap: portaltexture,
+    map: portaltexture
 })
 
 var holeX = -0.57;
@@ -355,19 +372,12 @@ for (var i=0; i<6;i++){
     world.addBody(holeBody);
     const holePortal = new THREE.Mesh(holeGeo, holeMat);
     holePortal.name = "Hole"+(i+1);
+    holePortal.add(portalLight.clone());
     scene.add(holePortal)
     if (i == 5) break;
     if (i == 2) holeZ = 0.6;
     if (i < 2) holeX += 0.57*2;
     else if (i > 2) holeX -= 0.57*2;
-}
-
-function playSound(path, volume){
-    var sound = new Howl({
-        src: [path],
-        volume: volume
-    })
-    sound.play()
 }
 
 // Hole Collision Detection
@@ -399,6 +409,22 @@ for (let element of world.bodies){
 };
 
 // Ball Container =============================================================
+
+gltfLoader.load('assets/water_dispenser/scene.gltf', (gltf) => {
+    gltf.scene.scale.set(0.03,0.03,0.03);
+    const waterCooler = gltf.scene;
+    waterCooler.position.set(0,0,0);
+    waterCooler.name = "waterCooler";
+    console.log(waterCooler)
+    waterCooler.children[0].children[0].remove(waterCooler.getObjectByName("Object_3"));
+    //waterCooler.position.add(new THREE.Vector3(0.1,1,0.45))
+    //waterCooler.position.sub(new THREE.Vector3(1.5,1,1.5))
+    waterCooler.offset = new THREE.Vector3(0.1,1,0.45);
+    scene.add(waterCooler);
+    init_ball_container();
+});
+//console.log(scene.getObjectByName("waterCooler"))
+
 function init_ball_container(){
     var containerGroup = new THREE.Group();
     const glassGeo = new THREE.CylinderGeometry(poolBallDiameter*5/2,poolBallDiameter*5/2,poolBallDiameter*5,10,16)//new THREE.CylinderGeometry(poolBallDiameter*5/2, poolBallDiameter*5/2, poolBallDiameter*5);
@@ -416,11 +442,21 @@ function init_ball_container(){
     const glassWall = new THREE.Mesh(glassGeo, glassMat)
     containerGroup.add(glassWall);
     containerGroup.name = "balljail"
+
+    const waterCooler = scene.getObjectByName("waterCooler");
+    console.log(scene.getObjectByName("waterCooler"))
+    const holePortal = new THREE.Mesh(holeGeo, holeMat);
+    holePortal.position.add(new THREE.Vector3(0,poolBallDiameter*2,0));
+    holePortal.scale.multiply(new THREE.Vector3(1.25,1,1.25));
+    holePortal.add(portalLight.clone());
+    holePortal.name = "jailportal";
+    containerGroup.add(holePortal);
+    containerGroup.add(waterCooler);
     scene.add(containerGroup);
     
     const capsuleBody = new CANNON.Body({
         type: CANNON.Body.STATIC,
-        position: new CANNON.Vec3(-0.75, 0.4, -0.75),
+        position: new CANNON.Vec3(-1.25, 0.4, -1.25),
         material: groundMaterial
     })
     const jailBottom = new CANNON.Cylinder(glassGeo.parameters.radiusTop, glassGeo.parameters.radiusBottom, 0.01, glassGeo.parameters.radialSegments);
@@ -440,13 +476,82 @@ function init_ball_container(){
         capsuleBody.addShape(new CANNON.Box(new CANNON.Vec3(0.01/2, glassGeo.parameters.height/2, baseLength/2)), new CANNON.Vec3(wallX, 0, wallZ), wallQuaternion);
     }
     capsuleBody.name = "balljail";
-
-
     world.addBody(capsuleBody);
     sync_model(containerGroup, capsuleBody)
 
 }
-init_ball_container();
+
+
+
+// Floor ======================================================================
+function create_tiles(radius, gap, material, width, height){
+    const hexShape = new THREE.Shape();
+    for (let i = 0; i < 6; i++) {
+        const angle = (Math.PI / 3) * i;
+        const x = radius * Math.cos(angle);
+        const y = radius * Math.sin(angle);
+        if (i === 0) {
+            hexShape.moveTo(x, y);
+        } else {
+            hexShape.lineTo(x, y);
+        }
+    }
+    const floorGeo = new THREE.ExtrudeGeometry(hexShape, extrudeSettings);
+
+    const tileGroup = new THREE.Group();
+    const xSpacing = radius * 1.5;
+    const zSpacing = Math.sqrt(3) * radius;
+
+    for (let q = -width/2; q <= width/2; q++) {
+        let r=0;
+        q % 2 !== 0 ? r = -height/2 : r = -height/2 + 1
+        for (r; r <= height/2; r++) {
+            const x = (xSpacing+gap) * q;
+            const z = (zSpacing+gap) * r + (q % 2 !== 0 ? (zSpacing+gap) / 2 : 0); // axial coordinate offset
+        
+            const tile = new THREE.Mesh(floorGeo, material);
+            tile.rotation.x = Math.PI / 2;
+            tile.position.set(x, 0, z);
+        
+            tileGroup.add(tile);
+        }
+    }
+    return tileGroup
+}
+
+const extrudeSettings = {steps: 1, depth: 0.01, bevelEnabled: true, bevelThickness: 0.0, bevelSize: 0, bevelOffset: 0, bevelSegments: 1};
+
+const floorMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    metalness: 0.3,
+    roughness: 0.7,
+    map: textureLoader.load("assets/slate.jpg", (texture) =>{
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(2, 2);
+    }),
+});
+const lightMat = new THREE.MeshStandardMaterial({
+    emissive: new THREE.Color(0x00ffff), // teal/cyan glow
+    emissiveIntensity: 1.5,
+    color: 0x111111,
+});
+
+const radius = 0.3;
+const floorWidth = 12, floorHeight = 8;
+const basicTiles = create_tiles(radius, radius/10 , floorMat, floorWidth, floorHeight)
+const glowTiles = create_tiles(radius*1.05, radius/10 , lightMat, floorWidth, floorHeight)
+for (var i = 0; i < basicTiles.children.length; i++) {
+    let pos = basicTiles.children[i].position;
+    glowTiles.children[i].position.set(pos.x, pos.y, pos.z);
+}
+
+basicTiles.position.sub(new THREE.Vector3(-0.5588,1,radius))
+glowTiles.position.sub(new THREE.Vector3(-0.5588,1+0.01,radius))
+scene.add(basicTiles);
+scene.add(glowTiles);
+
+
 // Mini Sun Overhead Light Model===============================================
 const sunGeo = new THREE.SphereGeometry(0.2);
 const sunMap = textureLoader.load("assets/sun.jpg");
@@ -459,33 +564,9 @@ const sunMat = new THREE.MeshStandardMaterial({
 })
 const overheadSun = new THREE.Mesh(sunGeo, sunMat);
 overheadSun.name = "Sun"
-
-// Set camera & Lighting=======================================================
-camera.position.set(0,2,1);
-
-cameraOrth.position.set(0,2,0);
-cameraOrth.position.x += 0.5588;
-cameraOrth.lookAt(0.5588,0,0);
-
-scene.background = new THREE.Color(0x444444);
-
-const light = new THREE.AmbientLight(0xaaaaaa, 1);
-light.name = "AmbientLight";
-scene.add(light);
-
-const miniSunLight = new THREE.PointLight(0xffffff, 3);
-miniSunLight.position.set(0.5588,1,0);
-miniSunLight.name = "DirectionalLight";
-miniSunLight.add(overheadSun);
-scene.add(miniSunLight);
-console.log(miniSunLight);
-
-//Shadow properties for the "sun"
-miniSunLight.castShadow = true;
-miniSunLight.shadow.mapSize.width = 4096; // default
-miniSunLight.shadow.mapSize.height = 4096; // default
-miniSunLight.shadow.camera.near = 0.5; // default
-miniSunLight.shadow.camera.far = 500; // default
+overheadSun.position.set(0.5588,1,0);
+overheadSun.add(miniSunLight);
+scene.add(overheadSun);
 
 // Timeout Functions===========================================================
 
@@ -525,7 +606,8 @@ function cue_hit(power) {
 
 // Cue Ball placing sequence for break or scratch
 function placeCueBall(){
-
+    //tableModel.
+    //var placeableArea = 
 }
 
 // ============================================================================
@@ -535,11 +617,12 @@ window.addEventListener('keydown', (event) => {
     keys[event.code] = true
     if (event.code === "KeyV") {
         orthoCam = !orthoCam;
-        miniSunLight.getObjectByName("Sun").material.visible = !miniSunLight.getObjectByName("Sun").material.visible;
+        scene.getObjectByName("Sun").material.visible = !scene.getObjectByName("Sun").material.visible;
         //miniSunLight.traverse((child) => {if (child.isMesh) child.visible = !child.visible})
         //cuePointer.geometry.scale(1,1,10)
         //cuePointer.geometry.scale(1,1,.1)
     }
+    if (keys["Space"]) cue_hit(0.5);//cueBall.applyImpulse(force, cueBall.position);
 });
 window.addEventListener('keyup', (event) => {
     keys[event.code] = false;
@@ -549,7 +632,7 @@ window.addEventListener('keyup', (event) => {
 function updateCameraMovement() {
     if (keys["KeyA"]) cuePointer.rotateY(0.05);  // aim left
     if (keys["KeyD"]) cuePointer.rotateY(-0.05);  // aim right
-    if (keys["Space"]) cue_hit(0.1);//cueBall.applyImpulse(force, cueBall.position);
+    
 }
 
 // ============================================================================
@@ -557,7 +640,7 @@ function updateCameraMovement() {
 function animate() {
     world.fixedStep(1 / 60);
     renderer.render(scene, orthoCam ? cameraOrth : camera);
-    controls.update();
+    if(!orthoCam) controls.update();
     stats.update();
     updateCameraMovement()
     //cannonDebugger.update() // Update the CannonDebugger meshes
@@ -570,9 +653,10 @@ function animate() {
     //Keep impulse pointer aligned with cue ball
     cuePointer.position.copy(cueBall.position);
     //Rotate sun model
-    miniSunLight.rotateY(0.003)
+    overheadSun.rotateY(-0.003)
     //Rotate portals
     for (let i = 1; i <7; i++) scene.getObjectByName("Hole"+i).rotateY(0.05);
+    scene.getObjectByName("jailportal").rotateY(0.05);
 }
 
 console.log(scene);
