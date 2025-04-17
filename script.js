@@ -9,7 +9,6 @@ import { OBJLoader, ThreeMFLoader } from 'three/examples/jsm/Addons.js'
 import CannonDebugger from 'cannon-es-debugger'
 import Stats from 'stats.js'
 import {Howl} from 'howler'
-import { contain } from 'three/src/extras/TextureUtils.js'
 
 // Create top-level environments ==============================================
 const scene = new THREE.Scene();
@@ -349,6 +348,7 @@ for (var i=0; i<6;i++){
     const holeBody = new CANNON.Body({
         type: CANNON.Body.STATIC,
         shape: holeShape,
+        isTrigger: true
     });
     holeBody.position.set(holeX,-0.09,holeZ);
     holeBody.name = "Hole"+(i+1);
@@ -382,10 +382,11 @@ for (let element of world.bodies){
             
             //Teleport to ball jail
             playSound('assets/audio/teleport.wav', 0.5); //Modify sound with Audacity to shorten
-            body.position.set(scene.getObjectByName("balljail").position)//(0,poolBallDiameter,0);
+            let pos = scene.getObjectByName("balljail").position
             body.velocity.set(0,0,0);
-            body.angularVelocity.set(0, 0, 0);
+            body.angularVelocity.set(0,0,0);
             body.inertia.set(0,0,0);
+            body.position.set(pos.x+Math.random()*0.05,pos.y+poolBallDiameter,pos.z+Math.random()*0.05);
         });
     };
 
@@ -400,7 +401,7 @@ for (let element of world.bodies){
 // Ball Container =============================================================
 function init_ball_container(){
     var containerGroup = new THREE.Group();
-    const glassGeo = new THREE.CapsuleGeometry(poolBallDiameter*5/2,poolBallDiameter*5,10,16)//new THREE.CylinderGeometry(poolBallDiameter*5/2, poolBallDiameter*5/2, poolBallDiameter*5);
+    const glassGeo = new THREE.CylinderGeometry(poolBallDiameter*5/2,poolBallDiameter*5/2,poolBallDiameter*5,10,16)//new THREE.CylinderGeometry(poolBallDiameter*5/2, poolBallDiameter*5/2, poolBallDiameter*5);
     const glassMat = new THREE.MeshPhysicalMaterial({
         color: 0xf2eee0,
         metalness: 0,
@@ -414,14 +415,38 @@ function init_ball_container(){
         });
     const glassWall = new THREE.Mesh(glassGeo, glassMat)
     containerGroup.add(glassWall);
-    containerGroup.position.set(-0.75, 0.4, -0.75)
     containerGroup.name = "balljail"
     scene.add(containerGroup);
     
-    
+    const capsuleBody = new CANNON.Body({
+        type: CANNON.Body.STATIC,
+        position: new CANNON.Vec3(-0.75, 0.4, -0.75),
+        material: groundMaterial
+    })
+    const jailBottom = new CANNON.Cylinder(glassGeo.parameters.radiusTop, glassGeo.parameters.radiusBottom, 0.01, glassGeo.parameters.radialSegments);
+    capsuleBody.addShape(jailBottom, new CANNON.Vec3(0, -glassGeo.parameters.height / 2, 0));
+
+    const wallQuaternion = new CANNON.Quaternion();
+    const theta = Math.PI / 5; // angle between two triangle sides (360° / 10 = 36°, in radians)
+    const baseLength = glassGeo.parameters.radiusTop * Math.sqrt(2 * (1 - Math.cos(theta)));
+
+    for (let i = 0; i < glassGeo.parameters.radialSegments; i++){
+        const angle = i * theta + Math.PI*1/10; // rotation around Y axis
+        const wallX = Math.sin(angle) * glassGeo.parameters.radiusTop;
+        const wallZ = Math.cos(angle) * glassGeo.parameters.radiusTop;
+
+        // Reset quaternion for each rotation
+        wallQuaternion.setFromEuler(0, Math.PI*1/2 + angle, 0); 
+        capsuleBody.addShape(new CANNON.Box(new CANNON.Vec3(0.01/2, glassGeo.parameters.height/2, baseLength/2)), new CANNON.Vec3(wallX, 0, wallZ), wallQuaternion);
+    }
+    capsuleBody.name = "balljail";
+
+
+    world.addBody(capsuleBody);
+    sync_model(containerGroup, capsuleBody)
+
 }
 init_ball_container();
-
 // Mini Sun Overhead Light Model===============================================
 const sunGeo = new THREE.SphereGeometry(0.2);
 const sunMap = textureLoader.load("assets/sun.jpg");
