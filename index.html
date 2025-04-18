@@ -12,12 +12,44 @@
       canvas {
         display: block;
       }
+      #game-ui {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: rgba(20, 20, 20, 0.8);
+        color: #00ffff;
+        padding: 15px;
+        border-radius: 10px;
+        font-family: sans-serif;
+        z-index: 100;
+      }
+      button {
+        margin: 5px;
+        padding: 10px 15px;
+        background-color: #222;
+        color: white;
+        border: 1px solid #00ffff;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+      button:hover {
+        background-color: #00ffff;
+        color: #000;
+      }
     </style>
 </head>
 <body>
-  <div id="Player Score">
-    Player 1 Score: 0
+  <div id="game-ui">
+    <h1>🌀 Interdimensional Pool</h1>
+    <div>
+      <button onclick="startGame(1)">1 Player (Time Attack)</button>
+      <button onclick="startGame(2)">2 Player</button>
+    </div>
+    <div id="game-info"></div>
+    <button onclick="resetGame()">Reset Game</button>
   </div>
+  
+  <div id="score">Player 1 Score: 0</div>
   <script src="script.js" type="Module"></script>
 </body>
 </html>

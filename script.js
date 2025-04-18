@@ -31,7 +31,7 @@ const controls = new OrbitControls(camera, renderer.domElement);
 
 // Debugging Helpers ==========================================================
 
-const axesHelper = new THREE.AxesHelper(5);
+const axesHelper = new THREE.AxesHelper(0.1);
 scene.add(axesHelper);
 
 const cannonDebugger = new CannonDebugger(scene, world, {color: 0x00ff00, scale: 1.0});
@@ -95,6 +95,17 @@ world.addContactMaterial(ball_ground);
 world.addContactMaterial(ball_bumper);
 
 const powerRange = [];
+
+
+let currentPlayer = 1;
+let playerScores = [0, 0];
+let singlePlayerStartTime = null;
+let singlePlayerEndTime = null;
+let sunkBalls = [];
+let currentBallIndex = 1; // For 1-player time attack (starts with ball #1)
+let isGameOver = false;
+let awaitingNextTurn = false;
+
 //=============================================================================
 //=============================================================================
 
@@ -275,7 +286,7 @@ const cueBall = pool_balls[1][0]; // Global name for the cue ball
 // Pool Table==================================================================
 // Create Pool Table
 function createTrimesh(geometry) {
-    const nonIndexed = geometry.toNonIndexed();
+    //const nonIndexed = geometry.toNonIndexed();
     const vertices = geometry.attributes.position.array;
   
     const positions = [];
@@ -291,11 +302,10 @@ function createTrimesh(geometry) {
   
 
 objectLoader.load('assets/pool_table/Pool Table.obj', (object) => {
-//objectLoader.load('assets/pool_table/Pool Table Reduced Poly.obj', (object) => { //Lower Poly Option
     scene.add(object);
     console.log(object);
     // Load texture
-    const texture = textureLoader.load('assets/table_felt.jpg');
+    const texture = textureLoader.load('assets/pool_table/brushed_metal.jpg');
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(1, 1); // You can tweak this if it looks stretched
@@ -327,7 +337,7 @@ objectLoader.load('assets/pool_table/Pool Table.obj', (object) => {
 
 
 const tableGeo = new THREE.BoxGeometry(tableWidth,0.005*2,tableLength,10,10,10);
-const tableMat = new THREE.MeshStandardMaterial({color: 0x00ffff, map: textureLoader.load("assets/table_felt.jpg")});
+const tableMat = new THREE.MeshStandardMaterial({color: 0x00ffff, map: textureLoader.load("assets/pool_table/table_felt.jpg")});
 const tableModel = new THREE.Mesh(tableGeo, tableMat);
 tableModel.castShadow = false;
 tableModel.receiveShadow = true;
@@ -380,23 +390,32 @@ for (var i=0; i<6;i++){
     else if (i > 2) holeX -= 0.57*2;
 }
 
-// Hole Collision Detection
+// Hole Collision Detection ===================================================
 let idx = 1;
 for (let element of world.bodies){
     if (element.name.includes("Hole")){
         element.addEventListener('collide', (event) => {
-            const { body, contact } = event;
+            const {body} = event;
             console.log(`Collision detected between hole: ${element.name} and body id: ${body.name}`);
-            console.log('Contact point:', contact.contactPointA);
-            console.log('Contact normal:', contact.ni);
-            
+            const ballName = body.name;
+
+            if (!ballName.includes("ball")) return;
+
+            // Prevent multiple detections
+            if (sunkBalls.includes(ballName)) return;
+            sunkBalls.push(ballName);
+
             //Teleport to ball jail
             playSound('assets/audio/teleport.wav', 0.5); //Modify sound with Audacity to shorten
-            let pos = scene.getObjectByName("balljail").position
-            body.velocity.set(0,0,0);
-            body.angularVelocity.set(0,0,0);
-            body.inertia.set(0,0,0);
-            body.position.set(pos.x+Math.random()*0.05,pos.y+poolBallDiameter,pos.z+Math.random()*0.05);
+            ball_teleport(body, true, scene.getObjectByName("balljail").position)
+
+            // Game logic
+            if (playerCount === 1) {
+                handleSinglePlayerSinking(body, ballName);
+            } else if (playerCount === 2) {
+                handleTwoPlayerSinking(body, ballName);
+            }
+
         });
     };
 
@@ -409,42 +428,11 @@ for (let element of world.bodies){
 };
 
 // Ball Container =============================================================
-
-gltfLoader.load('assets/water_dispenser/scene.gltf', (gltf) => {
-    gltf.scene.scale.set(0.03,0.03,0.03);
-    const waterCooler = gltf.scene;
-    waterCooler.position.set(0,0,0);
-    waterCooler.name = "waterCooler";
-    console.log(waterCooler)
-    waterCooler.children[0].children[0].remove(waterCooler.getObjectByName("Object_3"));
-    //waterCooler.position.add(new THREE.Vector3(0.1,1,0.45))
-    //waterCooler.position.sub(new THREE.Vector3(1.5,1,1.5))
-    waterCooler.offset = new THREE.Vector3(0.1,1,0.45);
-    scene.add(waterCooler);
-    init_ball_container();
-});
-//console.log(scene.getObjectByName("waterCooler"))
-
-function init_ball_container(){
+function init_ball_container(waterCooler){
     var containerGroup = new THREE.Group();
-    const glassGeo = new THREE.CylinderGeometry(poolBallDiameter*5/2,poolBallDiameter*5/2,poolBallDiameter*5,10,16)//new THREE.CylinderGeometry(poolBallDiameter*5/2, poolBallDiameter*5/2, poolBallDiameter*5);
-    const glassMat = new THREE.MeshPhysicalMaterial({
-        color: 0xf2eee0,
-        metalness: 0,
-        roughness: 0,
-        clearcoat: 1,
-        clearcoatRoughness: 0,
-        opacity: 1,
-        transmission: 1,
-        ior: 10,
-        reflectivity: 1,
-        });
-    const glassWall = new THREE.Mesh(glassGeo, glassMat)
-    containerGroup.add(glassWall);
-    containerGroup.name = "balljail"
+    const glassGeo = new THREE.CylinderGeometry(poolBallDiameter*4.5/2,poolBallDiameter*4.5/2,poolBallDiameter*10,10,16);
+    containerGroup.name = "balljail";
 
-    const waterCooler = scene.getObjectByName("waterCooler");
-    console.log(scene.getObjectByName("waterCooler"))
     const holePortal = new THREE.Mesh(holeGeo, holeMat);
     holePortal.position.add(new THREE.Vector3(0,poolBallDiameter*2,0));
     holePortal.scale.multiply(new THREE.Vector3(1.25,1,1.25));
@@ -454,13 +442,14 @@ function init_ball_container(){
     containerGroup.add(waterCooler);
     scene.add(containerGroup);
     
-    const capsuleBody = new CANNON.Body({
+    const jailBody = new CANNON.Body({
         type: CANNON.Body.STATIC,
         position: new CANNON.Vec3(-1.25, 0.4, -1.25),
+        quaternion: new CANNON.Quaternion().setFromEuler(0, Math.PI*1/3, 0),
         material: groundMaterial
     })
     const jailBottom = new CANNON.Cylinder(glassGeo.parameters.radiusTop, glassGeo.parameters.radiusBottom, 0.01, glassGeo.parameters.radialSegments);
-    capsuleBody.addShape(jailBottom, new CANNON.Vec3(0, -glassGeo.parameters.height / 2, 0));
+    jailBody.addShape(jailBottom, new CANNON.Vec3(0, -glassGeo.parameters.height / 2, 0));
 
     const wallQuaternion = new CANNON.Quaternion();
     const theta = Math.PI / 5; // angle between two triangle sides (360° / 10 = 36°, in radians)
@@ -473,15 +462,24 @@ function init_ball_container(){
 
         // Reset quaternion for each rotation
         wallQuaternion.setFromEuler(0, Math.PI*1/2 + angle, 0); 
-        capsuleBody.addShape(new CANNON.Box(new CANNON.Vec3(0.01/2, glassGeo.parameters.height/2, baseLength/2)), new CANNON.Vec3(wallX, 0, wallZ), wallQuaternion);
+        jailBody.addShape(new CANNON.Box(new CANNON.Vec3(0.01/2, glassGeo.parameters.height/2, baseLength/2)), new CANNON.Vec3(wallX, 0, wallZ), wallQuaternion);
     }
-    capsuleBody.name = "balljail";
-    world.addBody(capsuleBody);
-    sync_model(containerGroup, capsuleBody)
-
+    jailBody.name = "balljail";
+    world.addBody(jailBody);
+    sync_model(containerGroup, jailBody)
 }
 
-
+gltfLoader.load('assets/water_dispenser/scene.gltf', (gltf) => {
+    gltf.scene.scale.set(0.03,0.03,0.03);
+    const waterCooler = gltf.scene;
+    waterCooler.position.set(0,0,0);
+    waterCooler.name = "waterCooler";
+    console.log(waterCooler)
+    waterCooler.children[0].children[0].remove(waterCooler.getObjectByName("Object_3"));
+    waterCooler.offset = new THREE.Vector3(-0.11,-0.4,0.25);
+    waterCooler.position.add(waterCooler.offset)
+    init_ball_container(waterCooler);
+});
 
 // Floor ======================================================================
 function create_tiles(radius, gap, material, width, height){
@@ -532,7 +530,7 @@ const floorMat = new THREE.MeshStandardMaterial({
     }),
 });
 const lightMat = new THREE.MeshStandardMaterial({
-    emissive: new THREE.Color(0x00ffff), // teal/cyan glow
+    emissive: new THREE.Color(0x00ffff), // cyan glow
     emissiveIntensity: 1.5,
     color: 0x111111,
 });
@@ -574,7 +572,7 @@ scene.add(overheadSun);
     //pool_balls[1][0].position.set(-0.57,0,-0.6);
 //}, 1000);
 
-// Game Logic==================================================================
+// Cue Pointer=================================================================
 const material = new THREE.LineBasicMaterial({color: 0x0000ff});
 
 const points = [];
@@ -588,18 +586,46 @@ cuePointer.rotateY(Math.PI*1/2);
 scene.add(cuePointer);
 console.log(cuePointer)
 
+// Game Logic==================================================================
+
+document.getElementById("score").innerText = `Player 1: ${playerScores[0]} | Player 2: ${playerScores[1]}`;
+
+function startGame(players) {
+    playerCount = players;
+    isGameOver = false;
+    currentPlayer = 1;
+    playerScores = [0, 0];
+    sunkBalls = [];
+    currentBallIndex = 1;
+
+    document.getElementById("game-info").innerText = playerCount === 1 
+        ? "1 Player Mode : Sink balls in order 1 through 15 as fast as you can!" //1 Player Mode : Sink balls in order 1-7 then 9-15 then 8 as fast as you can!
+        : "2 Player Mode : Take turns sinking balls. Player with most wins!";
+
+    if (playerCount === 1) {
+        singlePlayerStartTime = performance.now();
+    }
+    else {
+
+    }
+}
+
+function resetGame() {
+    location.reload(); // Simple and effective for dev!
+}
+
+//if (playerCount === 1) {
+//    singlePlayerStartTime = performance.now();
+//}
+
 // Hit cue ball with specified power
 function cue_hit(power) {
-    // Create a direction vector pointing forward in local space (negative Z is "forward" in Three.js)
-    const direction = new THREE.Vector3(0, 0, -1); 
-    
-    // Convert this direction into world space using cuePointerHolder's orientation
-    direction.applyEuler(cuePointer.rotation); 
-    
-    // Optionally normalize and scale it to get the desired impulse strength
-    direction.normalize().multiplyScalar(power); // Adjust the scalar for power
+    if (awaitingNextTurn || isGameOver) return;
 
-    // Apply impulse in Cannon.js (convert THREE.Vector3 to CANNON.Vec3)
+    const direction = new THREE.Vector3(0, 0, -1);
+    direction.applyEuler(cuePointer.rotation);
+    direction.normalize().multiplyScalar(power);
+
     const impulse = new CANNON.Vec3(direction.x, 0, direction.z);
     cueBall.applyImpulse(impulse);
 }
@@ -610,6 +636,59 @@ function placeCueBall(){
     //var placeableArea = 
 }
 
+function handleSinglePlayerSinking(body, ballName) {
+    if (ballName === `${currentBallIndex}_ball`) {
+        currentBallIndex++;
+        if (currentBallIndex > 15) {
+            singlePlayerEndTime = performance.now();
+            isGameOver = true;
+            const timeTaken = ((singlePlayerEndTime - singlePlayerStartTime) / 1000).toFixed(2);
+            alert(`All balls sunk! Time taken: ${timeTaken} seconds.`);
+        }
+        ball_teleport(body, true, scene.getObjectByName("balljail").position)
+        let msg = `Nice job! Next ball: ${currentBallIndex} ball.`
+        console.log(msg)
+    }
+    else if (ballName === `cue_ball`){
+        //placeCueBall()
+        ball_teleport(body, false, scene.getObjectByName("balljail").position)
+        let msg = `Cue ball pocketed. Place behind the line and try again. Next ball: ${currentBallIndex} ball.`
+        console.log(msg)
+    }
+    else {
+        ball_teleport(body, false, scene.getObjectByName("balljail").position)
+        let msg = `Ball order improper. Ball reintroduced. Next ball: ${currentBallIndex} ball.`
+        console.log(msg)
+    }
+}
+
+function handleTwoPlayerSinking(body, ballName) {
+    playerScores[currentPlayer - 1]++;
+    awaitingNextTurn = true;
+    setTimeout(() => {
+        currentPlayer = 3 - currentPlayer; // Switch between 1 and 2
+        awaitingNextTurn = false;
+        alert(`Player ${currentPlayer}'s turn!`);
+    }, 1000);
+    var pick = call_8_pocket()
+    document.getElementById("score").innerText = `Player 1: ${playerScores[0]} | Player 2: ${playerScores[1]}`;
+}
+
+function ball_teleport(body, goodSink, position) {
+    let vel = new THREE.Vector3(0,0,0), angVel = new THREE.Vector3(0,0,0);
+    let pos = goodSink ? new THREE.Vector3(position.x+Math.random()*0.05, position.y+poolBallDiameter, position.z+Math.random()*0.05) : new THREE.Vector3(Math.random()*0.01,poolBallDiameter*2,Math.random()*0.01);
+    body.velocity.set(vel.x,vel.y,vel.z);
+    body.angularVelocity.set(angVel.x,angVel.y,angVel.z);
+    body.position.set(pos.x,pos.y,pos.z);
+}
+
+function call_8_pocket(){
+    let msg = `Choose a pocket: 1-6
+                1 2 3
+                6 5 4`;
+    let pick = 1; //user selection
+    return pick
+}
 // ============================================================================
 var keys = {};
 // Event Listeners for Key Presses
@@ -632,7 +711,6 @@ window.addEventListener('keyup', (event) => {
 function updateCameraMovement() {
     if (keys["KeyA"]) cuePointer.rotateY(0.05);  // aim left
     if (keys["KeyD"]) cuePointer.rotateY(-0.05);  // aim right
-    
 }
 
 // ============================================================================
@@ -661,4 +739,8 @@ function animate() {
 
 console.log(scene);
 console.log(world);
-animate();
+controls.target = pool_balls[0][0].position;
+setTimeout(function() {animate();}, 1000);
+
+window.startGame = startGame;
+window.resetGame = resetGame;
