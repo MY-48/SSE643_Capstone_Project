@@ -24,6 +24,23 @@
         font-family: sans-serif;
         z-index: 100;
       }
+      #power-bar-container {
+        position: absolute;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 300px;
+        height: 20px;
+        border: 2px solid #00ffff;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 100;
+      }
+      #power-bar-fill {
+        height: 100%;
+        width: 0%;
+        background: #00ffff;
+        transition: width 0.05s;
+      }
       button {
         margin: 5px;
         padding: 10px 15px;
@@ -41,16 +58,18 @@
 </head>
 <body>
   <div id="game-ui">
-    <h1>🌀 Interdimensional Pool</h1>
+    <h2>🌀 Interdimensional Pool</h2>
     <div>
       <button onclick="startGame(1)">1 Player (Time Attack)</button>
-      <button onclick="startGame(2)">2 Player</button>
+      <button onclick="startGame(2)">2 Player *WIP*</button>
     </div>
     <div id="game-info"></div>
     <button onclick="resetGame()">Reset Game</button>
   </div>
   
-  <div id="score">Player 1 Score: 0</div>
+  <div id="power-bar-container">
+    <div id="power-bar-fill"></div>
+  </div>  
   <script src="script.js" type="Module"></script>
 </body>
 </html>

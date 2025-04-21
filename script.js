@@ -93,17 +93,6 @@ world.addContactMaterial(ballContactMaterial);
 world.addContactMaterial(ball_ground);
 world.addContactMaterial(ball_bumper);
 
-const powerRange = [];
-
-
-let currentPlayer = 1;
-let playerScores = [0, 0];
-let singlePlayerStartTime = null;
-let singlePlayerEndTime = null;
-let sunkBalls = [];
-let currentBallIndex = 1; // For 1-player time attack (starts with ball #1)
-let isGameOver = false;
-let awaitingNextTurn = false;
 const teleportCooldowns = {};
 
 //=============================================================================
@@ -168,6 +157,11 @@ function playSound(path, volume){
         volume: volume
     })
     sound.play()
+}
+
+function addShadow(mesh, cast, receive){
+    mesh.castShadow = cast;
+    mesh.receiveShadow = receive;
 }
 
 // Pool Balls =================================================================
@@ -282,6 +276,16 @@ function init_pool_balls(){
 init_pool_balls();
 const cueBall = pool_balls[1][0]; // Global name for the cue ball
 
+// Cue Ball Pointer============================================================
+const material = new THREE.LineBasicMaterial({color: 0x0000ff});
+
+const points = [new THREE.Vector3(0,0,-0.1), new THREE.Vector3(0,0,0)];
+const geometry = new THREE.BufferGeometry().setFromPoints(points);
+
+const cuePointer = new THREE.Line(geometry, material);
+cuePointer.rotateY(Math.PI*1/2);
+scene.add(cuePointer);
+
 // Pool Table==================================================================
 // Create Pool Table
 function createTrimesh(geometry) {
@@ -297,23 +301,17 @@ function createTrimesh(geometry) {
     }
   
     return new CANNON.Trimesh(positions, indices);
-  }
-  
+}
 
 objectLoader.load('assets/pool_table/Pool Table.obj', (object) => {
-    // Load texture
-    const texture = textureLoader.load('assets/pool_table/brushed_metal.jpg');
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(1, 1); // You can tweak this if it looks stretched
-
     // Create standard material with texture
     const material = new THREE.MeshStandardMaterial({
-        map: texture,
+        map: textureLoader.load('assets/pool_table/brushed_metal.jpg'),
         roughness: 0.4,
         metalness: 0.1,
     });
-    object.children[0].material = material
+    object.children[0].material = material;
+    addShadow(object.children[0], true, false);
     object.name = "TableOutside";
     scene.add(object);
 
@@ -337,30 +335,27 @@ objectLoader.load('assets/pool_table/Pool Table.obj', (object) => {
 const tableGeo = new THREE.BoxGeometry(tableWidth,0.005*2,tableLength,10,10,10);
 const tableMat = new THREE.MeshStandardMaterial({color: 0x00ffff, map: textureLoader.load("assets/pool_table/table_felt.jpg")});
 const tableModel = new THREE.Mesh(tableGeo, tableMat);
-tableModel.castShadow = false;
-tableModel.receiveShadow = true;
+addShadow(tableModel, true, true);
 tableModel.name = "TableTop";
+scene.add(tableModel);
 
-//Add table line and circle
+//Add table head string
 const scratchGeo = new THREE.BoxGeometry(tableWidth, 0.001, 0.01);
 const tableLineModel = new THREE.Mesh(scratchGeo, new THREE.MeshStandardMaterial({color: 0xffffff, roughness:0.8}));
 tableLineModel.position.y += tableGeo.parameters.height/2;
 tableLineModel.position.z += tableGeo.parameters.depth/4;
-tableLineModel.castShadow = false;
-tableLineModel.receiveShadow = true;
+addShadow(tableLineModel, false, true);
 tableLineModel.name = "HeadString";
+tableModel.add(tableLineModel)
 
+//Add Table Foot Spot
 const spotGeo = new THREE.CylinderGeometry(poolBallDiameter/3, poolBallDiameter/3, 0.001);
 const spotModel = new THREE.Mesh(spotGeo, new THREE.MeshStandardMaterial({color: 0xffffff, roughness:0.8, map: textureLoader.load("assets/pool_table/spot_marker.jpg")}));//
 spotModel.position.y += tableGeo.parameters.height/2;
 spotModel.position.z -= tableGeo.parameters.depth/4;
-spotModel.castShadow = false;
-spotModel.receiveShadow = true;
+addShadow(spotModel, false, true);
 spotModel.name = "FootSpot";
-
-tableModel.add(tableLineModel)
 tableModel.add(spotModel)
-scene.add(tableModel);
 
 const tableTop = new CANNON.Body({
     type: CANNON.Body.STATIC,
@@ -387,21 +382,22 @@ const holeMat = new THREE.MeshPhongMaterial({
 
 var holeX = -0.57;
 var holeZ = -0.6;
+const holeShape = new CANNON.Cylinder(poolBallDiameter*2, poolBallDiameter*2, 0, 10);
 for (var i=0; i<6;i++){
-    //console.log(holeX+ " : "+ holeZ);
-    const holeShape = new CANNON.Cylinder(poolBallDiameter*2,poolBallDiameter*2,0,10);
+    //Three Mesh
+    const holePortal = new THREE.Mesh(holeGeo, holeMat);
+    holePortal.name = "Hole"+(i+1);
+    holePortal.add(portalLight.clone());
+    scene.add(holePortal)
+    //Cannon body
     const holeBody = new CANNON.Body({
         type: CANNON.Body.STATIC,
         shape: holeShape,
         isTrigger: true
     });
-    holeBody.position.set(holeX,-0.09,holeZ);
+    holeBody.position.set(holeX, -0.09, holeZ);
     holeBody.name = "Hole"+(i+1);
     world.addBody(holeBody);
-    const holePortal = new THREE.Mesh(holeGeo, holeMat);
-    holePortal.name = "Hole"+(i+1);
-    holePortal.add(portalLight.clone());
-    scene.add(holePortal)
     if (i == 5) break;
     if (i == 2) holeZ = 0.6;
     if (i < 2) holeX += 0.57*2;
@@ -411,6 +407,13 @@ for (var i=0; i<6;i++){
 // Hole Collision Detection ===================================================
 let idx = 1;
 for (let element of world.bodies){
+    // Add a portal mesh to each hole
+    if (element.name == ("Hole"+idx)) {
+        sync_model(scene.getObjectByName("Hole"+idx), element);
+        idx +=1;
+    }
+
+    // Add a collision event for each hole
     if (element.name.includes("Hole")){
         element.addEventListener('collide', (event) => {
             console.log(performance.now())
@@ -418,12 +421,10 @@ for (let element of world.bodies){
             const ballName = body.name;
             console.log(`Collision detected between hole: ${element.name} and body id: ${body.name}`);
             
-            if (!ballName.includes("ball")) return;
-
             // Prevent multiple collisions
             const now = Date.now();
             if (teleportCooldowns[ballName] && now - teleportCooldowns[ballName] < 200) {
-                return; // if recently teleported, skip
+                return; // if recently teleported, skip detection
             }
             teleportCooldowns[ballName] = now;
 
@@ -433,19 +434,23 @@ for (let element of world.bodies){
             } else if (playerCount === 2) {
                 handleTwoPlayerSinking(body, ballName);
             }
-
         });
     };
-
-    // Add a portal mesh to each hole
-    if (element.name == ("Hole"+idx)) {
-        sync_model(scene.getObjectByName("Hole"+idx), element);
-        //console.log(scene.getObjectByName("Hole"+idx));
-        idx +=1;
-    }
 };
 
 // Ball Container =============================================================
+gltfLoader.load('assets/water_dispenser/scene.gltf', (gltf) => {
+    gltf.scene.scale.set(0.03,0.03,0.03);
+    const waterCooler = gltf.scene;
+    waterCooler.position.set(0,0,0);
+    waterCooler.name = "waterCooler";
+    waterCooler.children[0].children[0].remove(waterCooler.getObjectByName("Object_3"));
+    waterCooler.offset = new THREE.Vector3(-0.11,-0.4,0.25);
+    waterCooler.position.add(waterCooler.offset)
+    addShadow(waterCooler.getObjectByName("Object_2"), true, true)
+    initBallContainer(waterCooler);
+});
+
 function initBallContainer(waterCooler){
     var containerGroup = new THREE.Group();
     const glassGeo = new THREE.CylinderGeometry(poolBallDiameter*4.5/2,poolBallDiameter*4.5/2,poolBallDiameter*10,10,16);
@@ -479,24 +484,13 @@ function initBallContainer(waterCooler){
         const wallZ = Math.cos(angle) * glassGeo.parameters.radiusTop;
 
         // Reset quaternion for each rotation
-        wallQuaternion.setFromEuler(0, Math.PI*1/2 + angle, 0); 
+        wallQuaternion.setFromEuler(0, Math.PI*1/2 + angle, 0);
         jailBody.addShape(new CANNON.Box(new CANNON.Vec3(0.01/2, glassGeo.parameters.height/2, baseLength/2)), new CANNON.Vec3(wallX, 0, wallZ), wallQuaternion);
     }
     jailBody.name = "BallJail";
     world.addBody(jailBody);
     sync_model(containerGroup, jailBody)
 }
-
-gltfLoader.load('assets/water_dispenser/scene.gltf', (gltf) => {
-    gltf.scene.scale.set(0.03,0.03,0.03);
-    const waterCooler = gltf.scene;
-    waterCooler.position.set(0,0,0);
-    waterCooler.name = "waterCooler";
-    waterCooler.children[0].children[0].remove(waterCooler.getObjectByName("Object_3"));
-    waterCooler.offset = new THREE.Vector3(-0.11,-0.4,0.25);
-    waterCooler.position.add(waterCooler.offset)
-    initBallContainer(waterCooler);
-});
 
 // Floor ======================================================================
 function createTiles(radius, gap, material, width, height, groupName){
@@ -527,7 +521,7 @@ function createTiles(radius, gap, material, width, height, groupName){
             const tile = new THREE.Mesh(floorGeo, material);
             tile.rotation.x = Math.PI / 2;
             tile.position.set(x, 0, z);
-        
+            addShadow(tile, false, true);
             tileGroup.add(tile);
         }
     }
@@ -584,45 +578,46 @@ overheadSun.position.set(0.5588,1,0);
 overheadSun.add(miniSunLight);
 scene.add(overheadSun);
 
-// Timeout Functions===========================================================
-
-//setTimeout(function() {
-    //pool_balls[1][0].position.set(-0.57,0,-0.6);
-//}, 1000);
-
-// Cue Pointer=================================================================
-const material = new THREE.LineBasicMaterial({color: 0x0000ff});
-
-const points = [];
-points.push(new THREE.Vector3(0,0,-0.1));//-0.1
-points.push(new THREE.Vector3(0,0,0));//0.1
-
-const geometry = new THREE.BufferGeometry().setFromPoints(points);
-
-const cuePointer = new THREE.Line(geometry, material);
-cuePointer.rotateY(Math.PI*1/2);
-scene.add(cuePointer);
-//console.log(cuePointer)
-
 // Game Logic==================================================================
+//Single player globals
+let singlePlayerStartTime = null;
+let singlePlayerEndTime = null;
+let sunkBalls = [];
+let currentBallIndex = 1; // For 1-player time attack (starts with ball #1)
+
+//Two player globals
+let currentPlayer = 1;
+let playerGroups = { 1: null, 2: null }; // "solids" or "stripes"
+let playerScores = { 1: [], 2: [] }; // track sunk balls
+
+let gameState = "break"; // break | assigned | 8-ball | over
+let ballGroupAssigned = false;
+let allStationary = true;
+let awaitingNextTurn = false;
+let playerCalledPocket = null;
+let isGameStart = false;
+let isGameOver = false;
+// ============================================================================
 // Start Game function
 function startGame(players) {
-    playerCount = players;
-    isGameOver = false;
-    currentPlayer = 1;
-    playerScores = [0, 0];
-    sunkBalls = [];
-    currentBallIndex = 1;
+    //console.log(performance.now())
+    if (!isGameStart){
+        placeCue(cueBall);
+        isGameStart = true;
+        playerCount = players;
+        isGameOver = false;
+        currentPlayer = 1;
+        playerScores = {1:[], 2:[]};
+        sunkBalls = [];
+        currentBallIndex = 1;
+    
+        document.getElementById("game-info").innerText = playerCount === 1 
+            ? `1 Player Mode : Sink balls in order 1 through 15 as fast as you can!\nUse arrow keys to move the cue ball to desired location.\nPress 'Enter' to place. Next ball: ${currentBallIndex} ball.`
+            : `2 Player Mode : Take turns sinking balls. Player with most wins!`;
 
-    document.getElementById("game-info").innerText = playerCount === 1 
-        ? "1 Player Mode : Sink balls in order 1 through 15 as fast as you can!" //1 Player Mode : Sink balls in order 1-7 then 9-15 then 8 as fast as you can!
-        : "2 Player Mode : Take turns sinking balls. Player with most wins!";
-
-    if (playerCount === 1) {
-        singlePlayerStartTime = performance.now();
-    }
-    else {
-
+        if (playerCount === 1) {
+            singlePlayerStartTime = performance.now();
+        }
     }
 }
 
@@ -631,9 +626,37 @@ function resetGame() {
     location.reload(); // Reset by reloading the webpage
 }
 
+let power = 0;
+let powerDirection = 1; // 1 = increasing, -1 = decreasing
+let powerCharging = false;
+let powerKeyHeld = false;
+let powerBarFill = document.getElementById("power-bar-fill");
+const powerMin = 0.1;
+const powerMax = 1.5;
+
+// Power bar
+function powerBar() {
+    if (!allStationary) return;
+    if (powerCharging) {
+        power += powerDirection * 0.02;
+    
+        if (power >= powerMax) {
+            power = powerMax;
+            powerDirection = -1;
+        }
+        if (power <= powerMin) {
+            power = powerMin;
+            powerDirection = 1;
+        }
+    
+        let percentage = ((power - powerMin) / (powerMax - powerMin)) * 100;
+        powerBarFill.style.width = `${percentage}%`;
+    }
+}
+
 // cue_hit function : Hit cue ball with specified power
 function cue_hit(power) {
-    if (awaitingNextTurn || isGameOver) return;
+    if (!allStationary || isGameOver || isPlacingCueBall) return;
 
     const direction = new THREE.Vector3(0, 0, -1);
     direction.applyEuler(cuePointer.rotation);
@@ -646,18 +669,16 @@ function cue_hit(power) {
 // Cue Ball placing sequence for break or scratch
 let isPlacingCueBall = false;
 let moveSpeed = 0.01;
-let moveDirection = { ArrowLeft: false, ArrowRight: false, ArrowUp: false, ArrowDown: false };
+let moveDirection = {ArrowLeft: false, ArrowRight: false, ArrowUp: false, ArrowDown: false};
 
-const placeableBox = new THREE.Line(new THREE.BoxGeometry(tableLength/4*0.98, 0, tableWidth*0.98), new THREE.MeshBasicMaterial()) // might need to offset width by poolBallDiameter
-placeableBox.position.x = tableLength-tableLength/4 - 0.5588/2
-placeableBox.position.y = 0.001
-//scene.add(placeableBox)
-
+const placeableBox = new THREE.Line(new THREE.BoxGeometry(tableLength/4*0.98, 0, tableWidth*0.98), new THREE.MeshBasicMaterial()); // might need to offset width by poolBallDiameter
+placeableBox.position.x = tableLength-tableLength/4 - 0.5588/2;
+placeableBox.position.y = 0.001;
 placeableBox.geometry.computeBoundingBox();
 const bbox = placeableBox.geometry.boundingBox;
-const bounds = {x_min: bbox.min.x+placeableBox.position.x, x_max: bbox.max.x+placeableBox.position.x, z_min: bbox.min.z, z_max: bbox.max.z};
-//console.log(bounds)
+const bounds = {x_min: bbox.min.x+placeableBox.position.x, x_max: bbox.max.x+placeableBox.position.x-poolBallDiameter/2, z_min: bbox.min.z+poolBallDiameter/2, z_max: bbox.max.z-poolBallDiameter/2};
 
+// Cue ball movement function
 function moveCueBall(){
     if (!isPlacingCueBall) return;
 
@@ -676,75 +697,122 @@ function moveCueBall(){
     cueBall.velocity.set(0, 0, 0);
     cueBall.angularVelocity.set(0, 0, 0);
 }
-///////////////////////
 
+function placeCue(body){
+    isPlacingCueBall = true;
+    orthoCam = true;
+    ballTeleport(body, true, cueBallDefaultPosition)
+    cueBall.sleep();
+    scene.add(placeableBox)
+}
+
+// Cue Ball place confirmation button
 function onClickConfirm() {
     isPlacingCueBall = false;
     orthoCam = false;
     cueBall.wakeUp();
     scene.remove(placeableBox);
-    document.body.removeChild(document.body.getElementById("button"));
 }
-///////////////////////
 
+// Single player mode logic handling
 function handleSinglePlayerSinking(body, ballName) {
     if (ballName === `${currentBallIndex}_ball`) {
         currentBallIndex++;
+        ballTeleport(body, true, scene.getObjectByName("BallJail").position)
+        let msg = `Nice job! Next ball: ${currentBallIndex} ball.`
+        document.getElementById("game-info").innerText = msg;
         if (currentBallIndex > 15) {
             singlePlayerEndTime = performance.now();
             isGameOver = true;
             const timeTaken = ((singlePlayerEndTime - singlePlayerStartTime) / 1000).toFixed(2);
             let msg = `All balls sunk! Time taken: ${timeTaken} seconds.`;
-            console.log(msg);
+            document.getElementById("game-info").innerText = msg;
         }
-        ballTeleport(body, true, scene.getObjectByName("BallJail").position)
-        let msg = `Nice job! Next ball: ${currentBallIndex} ball.`
-        console.log(msg)
     }
     else if (ballName === `cue_ball`){
-        //moveCueBall()
-        isPlacingCueBall = true;
-        orthoCam = true;
-        ballTeleport(body, true, cueBallDefaultPosition)
-        cueBall.sleep();
-        let msg = `Scratch! Cue ball pocketed. Place behind the line and try again. Next ball: ${currentBallIndex} ball.`
-        console.log(msg)
-        
-        scene.add(placeableBox)
-        const confirmBtn = document.createElement("button"); ////////////////////////// See about adding to a function cause this kinda clunky looking. also need to disable the ball hit, maybe hide the cue pointer
-        confirmBtn.innerText = "Place Cue Ball";
-        confirmBtn.style.position = "absolute";
-        confirmBtn.style.top = "10px";
-        confirmBtn.style.right = "10px";
-        confirmBtn.style.padding = "10px";
-        confirmBtn.style.zIndex = 100;
-        confirmBtn.style.background = "#00ffff";
-        confirmBtn.style.border = "none";
-        confirmBtn.style.cursor = "pointer";
-        document.body.appendChild(confirmBtn);
-        confirmBtn.addEventListener("click", onClickConfirm);
-
+        placeCue(body);
+        let msg = `Scratch! Cue ball pocketed. Use arrow keys to move the cue ball to desired location and press 'Enter'. Next ball: ${currentBallIndex} ball.`
+        document.getElementById("game-info").innerText = msg;
     }
     else {
         ballTeleport(body, false, new THREE.Vector3(Math.random()*0.01,poolBallDiameter*2,Math.random()*0.01))
         let msg = `Ball order improper. Ball reintroduced. Next ball: ${currentBallIndex} ball.`
-        console.log(msg)
+        document.getElementById("game-info").innerText = msg;
     }
 }
 
+// Two player mode logic handling
 function handleTwoPlayerSinking(body, ballName) {
-    playerScores[currentPlayer - 1]++;
-    awaitingNextTurn = true;
-    setTimeout(() => {
-        currentPlayer = 3 - currentPlayer; // Switch between 1 and 2
-        awaitingNextTurn = false;
-        let msg = `Player ${currentPlayer}'s turn!`
-        console.log(msg);
-    }, 1000);
-    var pick = call_8_pocket()
-    document.getElementById("score").innerText = `Player 1: ${playerScores[0]} | Player 2: ${playerScores[1]}`;
+    const number = parseInt(ballName.split("_")[0]);
+
+    if (ballName === "cue_ball") {
+        // Scratch
+        awaitingNextTurn = true;
+        setTimeout(() => switchTurns(), 1000);
+        placeCue(body);
+        let msg = `Scratch! Cue ball pocketed. Use arrow keys to move the cue ball to desired location and press 'Enter'. Next ball: ${currentBallIndex} ball.`
+        document.getElementById("game-info").innerText = msg;
+        return;
+    }
+
+    // 8-ball rules
+    if (number === 8) {
+        if (gameState !== "8-ball") {
+            declareWinner(3 - currentPlayer); // opponent wins
+            return;
+        } else if (playerCalledPocket) {
+            // Optional: check if pocket was correct
+            declareWinner(currentPlayer);
+            return;
+        } else {
+            awaitingNextTurn = true;
+            setTimeout(() => switchTurns(), 1000);
+            return;
+        }
+    }
+
+    // Assign groups on first valid sink
+    if (!ballGroupAssigned && number !== 0 && number !== 8) {
+        if (number >= 1 && number <= 7) {
+            playerGroups[currentPlayer] = "solids";
+            playerGroups[3 - currentPlayer] = "stripes";
+        } else {
+            playerGroups[currentPlayer] = "stripes";
+            playerGroups[3 - currentPlayer] = "solids";
+        }
+        gameState = "assigned";
+        ballGroupAssigned = true;
+        console.log(`Player ${currentPlayer} is ${playerGroups[currentPlayer]}`);
+    }
+
+    // Score update
+    if (gameState === "assigned") {
+        const group = playerGroups[currentPlayer];
+        const isPlayerBall = (group === "solids" && number >= 1 && number <= 7) || (group === "stripes" && number >= 9 && number <= 15);
+
+        if (isPlayerBall) {
+            playerScores[currentPlayer].push(number);
+            document.getElementById("game-info").innerText = `Player ${currentPlayer} sunk a ${group} ball!`;
+
+            if (playerScores[currentPlayer].length >= 7) {
+                // All group balls sunk → enter 8-ball phase
+                gameState = "8-ball";
+                document.getElementById("game-info").innerText = `Player ${currentPlayer} may now call the 8-ball.`;
+                playerCalledPocket = prompt("Which pocket are you calling for the 8-ball?");
+            }
+
+            // Do NOT switch turn
+            return;
+        } else {
+            // Wrong ball → switch turn
+            awaitingNextTurn = true;
+            document.getElementById("game-info").innerText = `Player ${currentPlayer} sunk opponent's ball. Turn ends.`;
+            setTimeout(() => switchTurns(), 1500);
+        }
+    }
 }
 
+// Function to handle ball movement/teleportation
 function ballTeleport(body, goodSink, position) {
     playSound('assets/audio/teleport.wav', 0.5); //Play Teleport sound effect
     let vel = new THREE.Vector3(0,0,0), angVel = new THREE.Vector3(0,0,0);
@@ -764,6 +832,25 @@ function ballTeleport(body, goodSink, position) {
     }, 1000);
 }
 
+function stationaryCheck(){
+    allStationary = true
+    for (let element of pool_balls[1]){
+        if (element.velocity.x > 0.1 || element.angularVelocity.x > 0.1 || element.velocity.z > 0.1 || element.angularVelocity.z > 0.1) allStationary = false;
+    }
+}
+
+function switchTurns() {
+    currentPlayer = 3 - currentPlayer;
+    awaitingNextTurn = false;
+    document.getElementById("game-info").innerText = `Player ${currentPlayer}'s turn`;
+}
+
+function declareWinner(playerNum) {
+    document.getElementById("game-info").innerText = `🎉 Player ${playerNum} wins the game!`;
+    gameState = "over";
+    isGameOver = true;
+}
+
 function call_8_pocket(){
     let msg = `Choose a pocket: 1-6
                 1 2 3
@@ -771,25 +858,40 @@ function call_8_pocket(){
     let pick = 1; //user selection
     return pick;
 }
+
 // ============================================================================
 var keys = {};
 // Event Listeners for Key Presses
 window.addEventListener('keydown', (event) => {
-    keys[event.code] = true
-    if (event.code === "KeyV") {
-        orthoCam = !orthoCam;
-        scene.getObjectByName("Sun").material.visible = !scene.getObjectByName("Sun").material.visible;
-        //miniSunLight.traverse((child) => {if (child.isMesh) child.visible = !child.visible})
-        //cuePointer.geometry.scale(1,1,10)
-        //cuePointer.geometry.scale(1,1,.1)
+    if (isGameStart){
+        keys[event.code] = true
+        if (event.code === "KeyV") {
+            orthoCam = !orthoCam;
+            scene.getObjectByName("Sun").material.visible = !scene.getObjectByName("Sun").material.visible;
+        }
+        if (keys["Enter"] && isPlacingCueBall) onClickConfirm();
+        if (event.code in moveDirection) moveDirection[event.code] = true;
+        if (event.code === "Space" && !powerKeyHeld){
+            powerKeyHeld = true;
+            powerCharging = true;
+            power = powerMin;
+            powerDirection = 1;
+        }
     }
-    if (keys["Space"]) cue_hit(0.5);//cueBall.applyImpulse(force, cueBall.position);
-    if (event.code in moveDirection) moveDirection[event.code] = true;
-
 });
+
 window.addEventListener('keyup', (event) => {
-    keys[event.code] = false;
-    if (event.code in moveDirection) moveDirection[event.code] = false;
+    if (isGameStart){
+        keys[event.code] = false;
+        if (event.code in moveDirection) moveDirection[event.code] = false;
+        if (event.code === "Space" && powerCharging) {
+            cue_hit(power); // shoot with current power
+            powerCharging = false;
+            powerKeyHeld = false;
+            power = 0;
+            powerBarFill.style.width = "0%";
+        }
+    }
 });
 
 // Camera Movement Logic
@@ -805,10 +907,12 @@ function animate() {
     renderer.render(scene, orthoCam ? cameraOrth : camera);
     if(!orthoCam) controls.update();
     stats.update();
-    keyboardInput();
-    //cannonDebugger.update() // Update the CannonDebugger meshes
-    moveCueBall();
-    requestAnimationFrame(animate);
+    if (isGameStart){
+        keyboardInput();
+        stationaryCheck();
+        moveCueBall();
+        powerBar();    
+    }
 
     for (var i = 0; i <= pool_balls[0].length-1; i++){
         sync_model(pool_balls[0][i],pool_balls[1][i]);
@@ -819,18 +923,16 @@ function animate() {
     //Rotate sun model
     overheadSun.rotateY(-0.003)
     //Rotate portals
-    for (let i = 1; i <7; i++) scene.getObjectByName("Hole"+i).rotateY(0.05);
+    for (let i = 1; i <= 6; i++) scene.getObjectByName("Hole"+i).rotateY(0.05);
     scene.getObjectByName("jailportal").rotateY(0.05);
+
+    requestAnimationFrame(animate);
 }
 
 console.log(scene);
 console.log(world);
 controls.target = pool_balls[0][0].position;
-setTimeout(function() {animate();}, 1000);
-setInterval(function() {
+setTimeout(function() {animate();}, 500);
 
-},750);
 window.startGame = startGame;
 window.resetGame = resetGame;
-
-moveCueBall()
