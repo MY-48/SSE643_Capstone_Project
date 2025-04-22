@@ -670,7 +670,6 @@ function startGame(players) {
         playerScores = {1:[], 2:[]};
         sunkBalls = [];
         currentBallIndex = 1;
-        jailPosition = scene.getObjectByName("BallJail").position.clone(); // Define the default place for ball to be sent when properly sunk
         
         // Add game info based on the button selection
         document.getElementById("game-info").innerText = playerCount === 1 
@@ -750,6 +749,7 @@ function cue_hit(power) {
     didSinkBall = false;
 
     // Randomize often to prevent balls stacking
+    jailPosition = scene.getObjectByName("BallJail").position.clone(); // Define the default place for ball to be sent when properly sunk
     jailPosition.x += (Math.random()-0.5)*0.01;
     jailPosition.z += (Math.random()-0.5)*0.01;
 }
@@ -827,7 +827,7 @@ function handleSinglePlayerSinking(body, ballName) {
         document.getElementById("game-info").innerText = msg;
 
         // State to handle sinking all balls and ending the game
-        if (currentBallIndex > 15) {
+        if (currentBallIndex > 2) {
             singlePlayerEndTime = performance.now(); // record time
             isGameOver = true;
             const timeTaken = ((singlePlayerEndTime - singlePlayerStartTime) / 1000).toFixed(2);
