@@ -1049,8 +1049,8 @@ document.getElementById("game-help").innerText = `Controls:\nLeft Click-Camera O
 //console.log(scene);
 //console.log(world);
 controls.target = pool_balls[0][0].position; // make camera look and follow the cue ball
-setTimeout(function() {animate();}, 500); //Run after 0.5 second, to allow for loading
-
+//setTimeout(function() {animate();}, 500); //Run after 0.5 second, to allow for loading
+animate();
 // Add start and reset functions to the html buttons
 window.startGame = startGame;
 window.resetGame = resetGame;
