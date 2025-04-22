@@ -750,8 +750,8 @@ function cue_hit(power) {
     didSinkBall = false;
 
     // Randomize often to prevent balls stacking
-    jailPosition.x += (Math.random()-0.5)*0.05;
-    jailPosition.z += (Math.random()-0.5)*0.05;
+    jailPosition.x += (Math.random()-0.5)*0.01;
+    jailPosition.z += (Math.random()-0.5)*0.01;
 }
 
 // Cue Ball placing sequence for break or scratch
