@@ -676,6 +676,7 @@ let powerDirection = 1; // 1 = increasing, -1 = decreasing
 let powerCharging = false;
 let powerKeyHeld = false;
 let powerBarFill = document.getElementById("power-bar-fill");
+let percentage = null;
 const powerMin = 0.1;
 const powerMax = 1.5;
 
@@ -694,7 +695,7 @@ function powerBar() {
             powerDirection = 1;
         }
     
-        let percentage = ((power - powerMin) / (powerMax - powerMin)) * 100;
+        percentage = ((power - powerMin) / (powerMax - powerMin)) * 100;
         powerBarFill.style.width = `${percentage}%`;
     }
 }
@@ -709,6 +710,7 @@ function cue_hit(power) {
 
     const impulse = new CANNON.Vec3(direction.x, 0, direction.z);
     cueBall.applyImpulse(impulse);
+    playSound("assets/audio/laser-gun.mp3", percentage*0.005)
     awaitingNextTurn = true;
     didSinkBall = false;
 }
