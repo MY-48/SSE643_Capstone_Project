@@ -992,6 +992,7 @@ document.getElementById("game-help").innerText = `Controls:\nLeft Click-Camera O
 console.log(scene);
 console.log(world);
 controls.target = pool_balls[0][0].position;
+//animate();
 setTimeout(function() {animate();}, 500);
 
 window.startGame = startGame;
