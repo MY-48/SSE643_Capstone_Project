@@ -58,14 +58,15 @@
 </head>
 <body>
   <div id="game-ui">
-    <h2>🌀 Interdimensional Pool</h2>
+    <h2 id="Title">🌀 Interdimensional Pool</h2>
     <div>
-      <button onclick="startGame(1)">1 Player (Time Attack)</button>
-      <button onclick="startGame(2)">2 Player</button>
+      <button onclick="startGame(1)" id="1Player">1 Player (Time Attack)</button>
+      <button onclick="startGame(2)" id="2Player">2 Player</button>
     </div>
     <div id="next-player"></div>
-    <div id="game-info"></div>
-    <button onclick="resetGame()">Reset Game</button>
+    <div id="game-info">^^ Select a Mode to Start ^^</div>
+    <div id="game-help"></div>
+    <button onclick="resetGame()" id="Reset">Reset Game</button>
   </div>
   
   <div id="power-bar-container">

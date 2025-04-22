@@ -27,15 +27,26 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-
+controls.autoRotate = true;
+controls.autoRotateSpeed = 6;
+controls.minDistance = 1;
+controls.maxDistance = 5;
+controls.minPolarAngle = Math.PI*1/8;
+controls.maxPolarAngle = Math.PI*1/2-0.2;
+controls.enableZoom = false;
+controls.enablePan = false;
 // Debugging Helpers ==========================================================
 
 const axesHelper = new THREE.AxesHelper(0.1);
-scene.add(axesHelper);
+//scene.add(axesHelper);
 
 const cannonDebugger = new CannonDebugger(scene, world, {color: 0x00ff00, scale: 1.0});
 
 const stats = new Stats();
+stats.domElement.style.position = 'fixed';
+stats.domElement.style.right = '0px';
+stats.domElement.style.top = '0px';
+stats.dom.style.left = 'auto';
 document.body.appendChild(stats.dom);
 
 // Loaders ====================================================================
@@ -114,7 +125,7 @@ light.name = "AmbientLight";
 scene.add(light);
 
 // Mini Sun Light
-const miniSunLight = new THREE.PointLight(0xffffff, 3);
+const miniSunLight = new THREE.PointLight(0xffffff, 3.5);
 miniSunLight.name = "DirectionalLight";
 miniSunLight.castShadow = true;
 miniSunLight.shadow.mapSize.width = 4096; // default
@@ -262,7 +273,7 @@ function init_pool_balls(){
     let tempPosition = structuredClone(pool_balls[1][8].position);
     pool_balls[1][8].position.copy(pool_balls[1][5].position);
     pool_balls[1][5].position.copy(tempPosition);
-    console.log("Pool Ball Array: ", pool_balls);
+    //console.log("Pool Ball Array: ", pool_balls);
 }
 
 init_pool_balls();
@@ -271,7 +282,7 @@ const cueBall = pool_balls[1][0]; // Global name for the cue ball
 // Cue Ball Pointer============================================================
 const material = new THREE.LineBasicMaterial({color: 0x0000ff});
 
-const points = [new THREE.Vector3(0,0,-0.1), new THREE.Vector3(0,0,0)];
+const points = [new THREE.Vector3(0,0,-0.2), new THREE.Vector3(0,0,0)];
 const geometry = new THREE.BufferGeometry().setFromPoints(points);
 
 const cuePointer = new THREE.Line(geometry, material);
@@ -408,10 +419,10 @@ for (let element of world.bodies){
     // Add a collision event for each hole
     if (element.name.includes("Hole")){
         element.addEventListener('collide', (event) => {
-            console.log(performance.now())
+            //console.log(performance.now())
             const {body} = event;
             const ballName = body.name;
-            console.log(`Collision detected between hole: ${element.name} and body id: ${body.name}`);
+            //console.log(`Collision detected between hole: ${element.name} and body id: ${body.name}`);
             
             // Prevent multiple collisions
             const now = Date.now();
@@ -553,6 +564,31 @@ glowTiles.position.sub(new THREE.Vector3(-0.5588,1+0.01,radius));
 scene.add(basicTiles);
 scene.add(glowTiles);
 
+const floorShape = new CANNON.Plane()
+const floorBody = new CANNON.Body({
+    type: CANNON.Body.STATIC,
+    position: new CANNON.Vec3(0,-0.15,0),
+    shape: floorShape,
+    isTrigger: true
+});
+floorBody.quaternion.setFromEuler(-Math.PI/2, 0, 0);
+floorBody.name = "WorldFloor";
+world.addBody(floorBody);
+floorBody.addEventListener('collide', (event) => {
+    const {body} = event;
+    const ballName = body.name;
+    
+    if (ballName === "cue_ball") {
+        awaitingNextTurn = true;
+        placeCue(body);
+        document.getElementById("game-info").innerText = `Cue ball fell off.`;
+    }
+    else {
+        ballTeleport(body, new THREE.Vector3(Math.random()*0.01,poolBallDiameter*2,Math.random()*0.01))
+        document.getElementById("game-info").innerText = `${ballName} fell off.`;
+    }
+});
+
 
 // Mini Sun Overhead Light Model===============================================
 const sunGeo = new THREE.SphereGeometry(0.2);
@@ -580,7 +616,7 @@ let jailPosition = null;
 
 //Two player globals
 let currentPlayer = 1;
-let playerGroups = { 1: null, 2: null }; // "solids" or "stripes"
+let playerGroups = { 1: "any", 2: "any" }; // "solids" or "stripes"
 let playerScores = { 1: [], 2: [] }; // track sunk balls
 
 let gameState = "break"; // break | assigned | 8-ball | over
@@ -597,6 +633,9 @@ function startGame(players) {
     //console.log(performance.now())
     if (!isGameStart){
         placeCue(cueBall);
+        controls.autoRotate = false;
+        controls.maxDistance = 1;
+        camera.position.set(2,0.8,0);
         isGameStart = true;
         playerCount = players;
         isGameOver = false;
@@ -609,18 +648,22 @@ function startGame(players) {
         jailPosition.z += (Math.random()-0.5)*0.06;
     
         document.getElementById("game-info").innerText = playerCount === 1 
-            ? `1 Player Mode : Sink balls in order 1 through 15 as fast as you can!\nUse arrow keys to move the cue ball to desired location.\nPress 'Enter' to place. Next ball: ${currentBallIndex} ball.`
-            : `2 Player Mode : Take turns sinking balls. Player with most wins!`;
+            ? `1 Player Mode : Sink balls in order 1 through 15 as fast as you can! Use arrow keys to move the cue ball to desired location. Press 'Enter' to place. Next ball: ${currentBallIndex} ball.`
+            : `2 Player Mode : Take turns sinking balls. The player to sink the 8-ball first after clearing their group(solid/stripes) wins!`;
 
         if (playerCount === 1) {
             singlePlayerStartTime = performance.now();
         }
         else if (playerCount === 2) {
             let msg = `Player ${currentPlayer}'s Turn.`;
-            console.log(msg)
+            //console.log(msg)
             document.getElementById("next-player").innerText = msg;
         }
     }
+    document.getElementById("game-help").innerText = ``;
+    document.getElementById("Title").remove()
+    document.getElementById("1Player").remove()
+    document.getElementById("2Player").remove()
 }
 
 // Reset game function
@@ -706,7 +749,7 @@ function placeCue(body){
     isPlacingCueBall = true;
     orthoCam = !orthoCam;
     scene.getObjectByName("Sun").material.visible = !scene.getObjectByName("Sun").material.visible;
-    ballTeleport(body, true, cueBallDefaultPosition)
+    ballTeleport(body, cueBallDefaultPosition)
     cueBall.sleep();
     scene.add(placeableBox)
 }
@@ -724,7 +767,7 @@ function onClickConfirm() {
 function handleSinglePlayerSinking(body, ballName) {
     if (ballName === `${currentBallIndex}_ball`) {
         currentBallIndex++;
-        ballTeleport(body, true, jailPosition)
+        ballTeleport(body, jailPosition)
         let msg = `Nice job! Next ball: ${currentBallIndex} ball.`
         document.getElementById("game-info").innerText = msg;
         if (currentBallIndex > 15) {
@@ -741,7 +784,7 @@ function handleSinglePlayerSinking(body, ballName) {
         document.getElementById("game-info").innerText = msg;
     }
     else {
-        ballTeleport(body, false, new THREE.Vector3(Math.random()*0.01,poolBallDiameter*2,Math.random()*0.01))
+        ballTeleport(body, new THREE.Vector3(Math.random()*0.01,poolBallDiameter*2,Math.random()*0.01))
         let msg = `Ball order improper. Ball reintroduced. Next ball: ${currentBallIndex} ball.`
         document.getElementById("game-info").innerText = msg;
     }
@@ -749,7 +792,7 @@ function handleSinglePlayerSinking(body, ballName) {
 
 // Two player mode logic handling
 function handleTwoPlayerSinking(body, ballName) {
-    console.log(playerScores)
+    //console.log(playerScores)
     const number = parseInt(ballName.split("_")[0]);
 
     // Scratch
@@ -797,25 +840,25 @@ function handleTwoPlayerSinking(body, ballName) {
         document.getElementById("game-info").innerText = `Player ${currentPlayer} sunk a ${group} ball!`;
 
         // Check for 8-ball eligibility
-        if (playerScores[currentPlayer].length >= 1) {
+        if (playerScores[currentPlayer].length >= 7) {
             gameState = "8-ball";
             playerCalledPocket = prompt(`Call your pocket for the 8-ball (1-6):\n*Note* Pocket 1 is closest to the water cooler and the next pockets are counted clockwise.`);
             document.getElementById("game-info").innerText = `Player ${currentPlayer} called pocket ${playerCalledPocket} for the 8-ball.`;
             awaitingNextTurn = true
         }
 
-        ballTeleport(body, true, jailPosition);
+        ballTeleport(body, jailPosition);
     } else {
         // Sunk opponent's ball or invalid group
         awaitingNextTurn = true;
         playerScores[3-currentPlayer].push(number);
         document.getElementById("game-info").innerText = `Player ${currentPlayer} sunk an opponent's ball. Turn ends.`;
-        ballTeleport(body, false, jailPosition);
+        ballTeleport(body, jailPosition);
     }
 }
 
 // Function to handle ball movement/teleportation
-function ballTeleport(body, goodSink, position) {
+function ballTeleport(body, position) {
     playSound('assets/audio/teleport.wav', 0.5); //Play Teleport sound effect
     let vel = new THREE.Vector3(0,0,0), angVel = new THREE.Vector3(0,0,0);
     let pos = new THREE.Vector3(position.x, position.y+poolBallDiameter, position.z);
@@ -827,10 +870,13 @@ function ballTeleport(body, goodSink, position) {
     body.wakeUp()
     // Error check the ball repositioning
     setTimeout(function() {
-        if (-poolBallDiameter*2 < body.position.y < 1) {
-            ballTeleport(body, goodSink, position) //Try again
-            console.log("Ball Wormhole Error: Retransmitting Ball")}
-        else console.log("Ball Wormhole Success")
+        if (isGameStart) {
+            if (-poolBallDiameter*2 < body.position.y < 1) {
+                ballTeleport(body, position) //Try again
+                document.getElementById("game-help").innerText = "Ball Teleport Error: Retransmitting Ball";}
+            else document.getElementById("game-help").innerText = "Ball Teleport Success!";
+            setTimeout(function() {document.getElementById("game-help").innerText = '';}, 2000);
+        }
     }, 1000);
 }
 
@@ -842,20 +888,22 @@ function stationaryCheck(){
 }
 
 function switchTurns() {
-    if (awaitingNextTurn && allStationary && !didSinkBall){
-        currentPlayer = 3 - currentPlayer;
-        awaitingNextTurn = false;
-        document.getElementById("next-player").innerText = `Player ${currentPlayer}'s turn. Target ${playerGroups[currentPlayer]}`;
-        if (gameState === "8-ball"){
-            gameState = "assigned"
+    if (playerCount === 2){
+        if (awaitingNextTurn && allStationary && !didSinkBall){
+            currentPlayer = 3 - currentPlayer;
+            awaitingNextTurn = false;
+            document.getElementById("next-player").innerText = `Player ${currentPlayer}'s turn. Target ${playerGroups[currentPlayer]}`;
+            if (gameState === "8-ball"){
+                gameState = "assigned"
+            }
+            else if (playerScores[currentPlayer].length >= 7){
+                gameState = "8-ball"
+                playerCalledPocket = prompt("Which pocket are you calling for the 8-ball?");
+                document.getElementById("game-info").innerText = `Pocket ${playerCalledPocket} called.`;
+            }
         }
-        else if (playerScores[currentPlayer].length >= 1){
-            gameState = "8-ball"
-            playerCalledPocket = prompt("Which pocket are you calling for the 8-ball?");
-            document.getElementById("game-info").innerText = `Pocket ${playerCalledPocket} called.`;
-        }
+        console.log(gameState)
     }
-    console.log(gameState)
 }
 
 function declareWinner(playerNum) {
@@ -917,6 +965,7 @@ function animate() {
     renderer.render(scene, orthoCam ? cameraOrth : camera);
     if(!orthoCam) controls.update();
     stats.update();
+    //cannonDebugger.update()
     if (isGameStart){
         keyboardInput();
         stationaryCheck();
@@ -939,7 +988,7 @@ function animate() {
 
     requestAnimationFrame(animate);
 }
-
+document.getElementById("game-help").innerText = `Controls:\nLeft Click-Camera Orbit\V-Change Camera\nA-Aim Left\nD-Aim Right\nQ-Slow Aim Left\nE-Slow Aim Right\nSpace-Hold then Release hits cue\nArrowKeys-Place Cue Ball\nEnter-Confirm Cue Move`;
 console.log(scene);
 console.log(world);
 controls.target = pool_balls[0][0].position;
