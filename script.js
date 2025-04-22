@@ -1046,11 +1046,10 @@ function animate() {
 
 // Add control list before games start
 document.getElementById("game-help").innerText = `Controls:\nLeft Click-Camera Orbit\V-Change Camera\nA-Aim Left\nD-Aim Right\nQ-Slow Aim Left\nE-Slow Aim Right\nSpace-Hold then Release hits cue\nArrowKeys-Place Cue Ball\nEnter-Confirm Cue Move`;
-//console.log(scene);
-//console.log(world);
-controls.target = pool_balls[0][0].position; // make camera look and follow the cue ball
-//setTimeout(function() {animate();}, 500); //Run after 0.5 second, to allow for loading
-animate();
 // Add start and reset functions to the html buttons
 window.startGame = startGame;
 window.resetGame = resetGame;
+
+controls.target = pool_balls[0][0].position; // make camera look and follow the cue ball
+
+setTimeout(function() {animate();}, 100); //Run after 0.5 second, to allow for loading

@@ -3855,4 +3855,4 @@ Q-Slow Aim Left
 E-Slow Aim Right
 Space-Hold then Release hits cue
 ArrowKeys-Place Cue Ball
-Enter-Confirm Cue Move`;dn.target=cn[0][0].position;Lf();window.startGame=kb;window.resetGame=Hb;
+Enter-Confirm Cue Move`;window.startGame=kb;window.resetGame=Hb;dn.target=cn[0][0].position;setTimeout(function(){Lf()},100);
