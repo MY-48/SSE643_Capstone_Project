@@ -588,7 +588,7 @@ scene.add(glowTiles);
 const floorShape = new CANNON.Plane()
 const floorBody = new CANNON.Body({
     type: CANNON.Body.STATIC,
-    position: new CANNON.Vec3(0,-0.15,0),
+    position: new CANNON.Vec3(0,-0.16,0),
     shape: floorShape,
     isTrigger: true
 });
