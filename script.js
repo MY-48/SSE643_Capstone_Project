@@ -576,6 +576,7 @@ let singlePlayerStartTime = null;
 let singlePlayerEndTime = null;
 let sunkBalls = [];
 let currentBallIndex = 1; // For 1-player time attack (starts with ball #1)
+let jailPosition = null;
 
 //Two player globals
 let currentPlayer = 1;
@@ -603,6 +604,9 @@ function startGame(players) {
         playerScores = {1:[], 2:[]};
         sunkBalls = [];
         currentBallIndex = 1;
+        jailPosition = scene.getObjectByName("BallJail").position;
+        jailPosition.x += (Math.random()-0.5)*0.06;
+        jailPosition.z += (Math.random()-0.5)*0.06;
     
         document.getElementById("game-info").innerText = playerCount === 1 
             ? `1 Player Mode : Sink balls in order 1 through 15 as fast as you can!\nUse arrow keys to move the cue ball to desired location.\nPress 'Enter' to place. Next ball: ${currentBallIndex} ball.`
@@ -720,7 +724,7 @@ function onClickConfirm() {
 function handleSinglePlayerSinking(body, ballName) {
     if (ballName === `${currentBallIndex}_ball`) {
         currentBallIndex++;
-        ballTeleport(body, true, scene.getObjectByName("BallJail").position)
+        ballTeleport(body, true, jailPosition)
         let msg = `Nice job! Next ball: ${currentBallIndex} ball.`
         document.getElementById("game-info").innerText = msg;
         if (currentBallIndex > 15) {
@@ -745,79 +749,68 @@ function handleSinglePlayerSinking(body, ballName) {
 
 // Two player mode logic handling
 function handleTwoPlayerSinking(body, ballName) {
+    console.log(playerScores)
     const number = parseInt(ballName.split("_")[0]);
 
     // Scratch
     if (ballName === "cue_ball") {
         placeCue(body);
-        let msg = `Scratch! Cue ball pocketed. Use arrow keys to move the cue ball to desired location and press 'Enter'.`
-        document.getElementById("game-info").innerText = msg;
+        awaitingNextTurn = true;
+        document.getElementById("game-info").innerText = `Scratch! Cue ball pocketed. Player ${currentPlayer} loses their turn.`;
         return;
     }
 
-    // 8-ball rules
+    // 8-Ball handling
     if (number === 8) {
         if (gameState !== "8-ball") {
-            declareWinner(3 - currentPlayer); // opponent wins
-            return;
+            declareWinner(3 - currentPlayer); // premature 8-ball
         } else if (playerCalledPocket) {
-            // Check if pocket was correct
             declareWinner(currentPlayer);
-            return;
         } else {
+            document.getElementById("game-info").innerText = `Player ${currentPlayer} failed to call a pocket! Player ${3 - currentPlayer} wins.`;
             declareWinner(3 - currentPlayer);
-            return;
         }
+        return;
     }
 
     // Assign groups on first valid sink
     if (!ballGroupAssigned && number !== 0 && number !== 8) {
-        if (number >= 1 && number <= 7) {
+        if (number <= 7) {
             playerGroups[currentPlayer] = "solids";
             playerGroups[3 - currentPlayer] = "stripes";
         } else {
             playerGroups[currentPlayer] = "stripes";
             playerGroups[3 - currentPlayer] = "solids";
         }
-        gameState = "assigned";
         ballGroupAssigned = true;
-        document.getElementById("next-player").innerText = `Player ${currentPlayer}'s turn. Target ${playerGroups[currentPlayer]}`
-        ballTeleport(body, true, scene.getObjectByName("BallJail").position)
+        gameState = "assigned";
+        document.getElementById("game-info").innerText = `Player ${currentPlayer} is assigned ${playerGroups[currentPlayer]}`;
     }
 
-    // Score update
-    if (gameState === "assigned") {
-        const group = playerGroups[currentPlayer];
-        console.log(group)
-        console.log(playerGroups)
-        console.log(playerScores)    
-        const isPlayerBall = (group === "solids" && number >= 1 && number <= 7) || (group === "stripes" && number >= 9 && number <= 15);
+    // Check ball group validity
+    const group = playerGroups[currentPlayer];
+    const isPlayerBall = (group === "solids" && number >= 1 && number <= 7) || (group === "stripes" && number >= 9 && number <= 15);
 
-        if (isPlayerBall) {
-            didSinkBall = true;
-            playerScores[currentPlayer].push(number);
-            console.log(`Player ${currentPlayer} sunk a ${group} ball!`)
-            document.getElementById("game-info").innerText = `Player ${currentPlayer} sunk a ${group} ball!`;
+    if (isPlayerBall) {
+        didSinkBall = true;
+        playerScores[currentPlayer].push(number);
+        document.getElementById("game-info").innerText = `Player ${currentPlayer} sunk a ${group} ball!`;
 
-            if (playerScores[currentPlayer].length >= 8) {
-                // All group balls sunk → enter 8-ball phase
-                gameState = "8-ball";
-                console.log(`Player ${currentPlayer} may now call the 8-ball.`)
-                document.getElementById("game-info").innerText = `Player ${currentPlayer} may now call the 8-ball.`;
-                playerCalledPocket = prompt("Which pocket are you calling for the 8-ball?");
-                document.getElementById("game-info").innerText = `Pocket ${playerCalledPocket} called.`;
-            }
-            ballTeleport(body, true, scene.getObjectByName("BallJail").position)
-            // Do NOT switch turn
-            return;
-        } else {
-            // Wrong ball → switch turn
-            awaitingNextTurn = true;
-            playerScores[3-currentPlayer].push(number)
-            ballTeleport(body, true, scene.getObjectByName("BallJail").position)
-            console.log(`Player ${currentPlayer} sunk opponent's ball. Turn ends.`)
-            document.getElementById("game-info").innerText = `Player ${currentPlayer} sunk opponent's ball. Turn ends.`;
+        // Check for 8-ball eligibility
+        if (playerScores[currentPlayer].length >= 1) {
+            gameState = "8-ball";
+            playerCalledPocket = prompt(`Call your pocket for the 8-ball (1-6):\n*Note* Pocket 1 is closest to the water cooler and the next pockets are counted clockwise.`);
+            document.getElementById("game-info").innerText = `Player ${currentPlayer} called pocket ${playerCalledPocket} for the 8-ball.`;
+            awaitingNextTurn = true
         }
+
+        ballTeleport(body, true, jailPosition);
+    } else {
+        // Sunk opponent's ball or invalid group
+        awaitingNextTurn = true;
+        playerScores[3-currentPlayer].push(number);
+        document.getElementById("game-info").innerText = `Player ${currentPlayer} sunk an opponent's ball. Turn ends.`;
+        ballTeleport(body, false, jailPosition);
     }
 }
 
@@ -856,10 +849,8 @@ function switchTurns() {
         if (gameState === "8-ball"){
             gameState = "assigned"
         }
-        else if (playerScores[currentPlayer].length >= 8){
+        else if (playerScores[currentPlayer].length >= 1){
             gameState = "8-ball"
-            console.log(`Player ${currentPlayer} may now call the 8-ball.`)
-            document.getElementById("game-info").innerText = `Player ${currentPlayer} may now call the 8-ball.`;
             playerCalledPocket = prompt("Which pocket are you calling for the 8-ball?");
             document.getElementById("game-info").innerText = `Pocket ${playerCalledPocket} called.`;
         }
@@ -874,13 +865,6 @@ function declareWinner(playerNum) {
     isGameOver = true;
 }
 
-function call_8_pocket(){
-    let msg = `Choose a pocket: 1-6
-                1 2 3
-                6 5 4`;
-    let pick = 1; //user selection
-    return pick;
-}
 
 // ============================================================================
 var keys = {};
