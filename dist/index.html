@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SSE643 Capstone Project</title>
+  <link rel="shortcut icon" href="/SSE643_Capstone_Project/assets/icon-D22jpm28.png">
+  <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+      canvas {
+        display: block;
+      }
+      #game-ui {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: rgba(20, 20, 20, 0.8);
+        color: #00ffff;
+        padding: 15px;
+        border-radius: 10px;
+        font-family: sans-serif;
+        z-index: 100;
+      }
+      #power-bar-container {
+        position: absolute;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 300px;
+        height: 20px;
+        border: 2px solid #00ffff;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 100;
+      }
+      #power-bar-fill {
+        height: 100%;
+        width: 0%;
+        background: #00ffff;
+        transition: width 0.05s;
+      }
+      button {
+        margin: 5px;
+        padding: 10px 15px;
+        background-color: #222;
+        color: white;
+        border: 1px solid #00ffff;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+      button:hover {
+        background-color: #00ffff;
+        color: #000;
+      }
+    </style>
+  <script type="module" crossorigin src="/SSE643_Capstone_Project/assets/index-DNttPn_Q.js"></script>
+</head>
+<body>
+  <div id="game-ui">
+    <h2 id="Title">🌀 Interdimensional Pool</h2>
+    <div>
+      <button onclick="startGame(1)" id="1Player">1 Player (Time Attack)</button>
+      <button onclick="startGame(2)" id="2Player">2 Player</button>
+    </div>
+    <div id="next-player"></div>
+    <div id="game-info">^^ Select a Mode to Start ^^</div>
+    <div id="game-help"></div>
+    <button onclick="resetGame()" id="Reset">Reset Game</button>
+  </div>
+  
+  <div id="power-bar-container">
+    <div id="power-bar-fill"></div>
+  </div>  
+</body>
+</html>

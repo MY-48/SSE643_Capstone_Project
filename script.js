@@ -1053,6 +1053,6 @@ window.resetGame = resetGame;
 controls.target = pool_balls[0][0].position; // make camera look and follow the cue ball
 
 setTimeout(function() { //Run delayed to allow for loading
-    document.getElementById("game-help").innerText = `Controls:\nLeft Click-Camera Orbit\V-Change Camera\nA-Aim Left\nD-Aim Right\nQ-Slow Aim Left\nE-Slow Aim Right\nSpace-Hold then Release hits cue\nArrowKeys-Place Cue Ball\nEnter-Confirm Cue Move`;
+    document.getElementById("game-help").innerText = `Controls:\nLeft Click-Camera Orbit\nV-Change Camera\nA-Aim Left\nD-Aim Right\nQ-Slow Aim Left\nE-Slow Aim Right\nSpace-Hold then Release hits cue\nArrowKeys-Place Cue Ball\nEnter-Confirm Cue Move`;
     animate();
 }, 1000);
