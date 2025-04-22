@@ -60,7 +60,6 @@ window.addEventListener('resize', () => {
 // Enviromnet Variables =======================================================
 var orthoCam = false;
 var pool_balls = [[],[]];
-var gameType = "8-ball";
 var playerCount = 1; //single player default
 
 // Constants
@@ -242,17 +241,10 @@ function shuffleArrayWithFixedIndex(array, fixedIndex) {
 function init_pool_balls(){
     const ballPositions = generatePoolBallPositions(poolBallDiameter/2);
     //Create Pool Balls
-    if (gameType === "8-ball") { 
-        for (var i = 0; i <= 15; i++){
-            gen_pool_ball(i);
-        }
-        shuffleArrayWithFixedIndex(ballPositions,5);
+    for (var i = 0; i <= 15; i++){
+        gen_pool_ball(i);
     }
-    else if (gameTypse === "9-ball") {
-        for (var i = 0; i <= 9; i++){
-            gen_pool_ball(i);
-        }
-    }
+    shuffleArrayWithFixedIndex(ballPositions,5);
     
     let idx = 0;
     for (var element of scene.children){
@@ -594,6 +586,7 @@ let gameState = "break"; // break | assigned | 8-ball | over
 let ballGroupAssigned = false;
 let allStationary = true;
 let awaitingNextTurn = false;
+let didSinkBall = false;
 let playerCalledPocket = null;
 let isGameStart = false;
 let isGameOver = false;
@@ -617,6 +610,11 @@ function startGame(players) {
 
         if (playerCount === 1) {
             singlePlayerStartTime = performance.now();
+        }
+        else if (playerCount === 2) {
+            let msg = `Player ${currentPlayer}'s Turn.`;
+            console.log(msg)
+            document.getElementById("next-player").innerText = msg;
         }
     }
 }
@@ -664,6 +662,8 @@ function cue_hit(power) {
 
     const impulse = new CANNON.Vec3(direction.x, 0, direction.z);
     cueBall.applyImpulse(impulse);
+    awaitingNextTurn = true;
+    didSinkBall = false;
 }
 
 // Cue Ball placing sequence for break or scratch
@@ -700,7 +700,8 @@ function moveCueBall(){
 
 function placeCue(body){
     isPlacingCueBall = true;
-    orthoCam = true;
+    orthoCam = !orthoCam;
+    scene.getObjectByName("Sun").material.visible = !scene.getObjectByName("Sun").material.visible;
     ballTeleport(body, true, cueBallDefaultPosition)
     cueBall.sleep();
     scene.add(placeableBox)
@@ -709,7 +710,8 @@ function placeCue(body){
 // Cue Ball place confirmation button
 function onClickConfirm() {
     isPlacingCueBall = false;
-    orthoCam = false;
+    orthoCam = !orthoCam;
+    scene.getObjectByName("Sun").material.visible = !scene.getObjectByName("Sun").material.visible;
     cueBall.wakeUp();
     scene.remove(placeableBox);
 }
@@ -745,12 +747,10 @@ function handleSinglePlayerSinking(body, ballName) {
 function handleTwoPlayerSinking(body, ballName) {
     const number = parseInt(ballName.split("_")[0]);
 
+    // Scratch
     if (ballName === "cue_ball") {
-        // Scratch
-        awaitingNextTurn = true;
-        setTimeout(() => switchTurns(), 1000);
         placeCue(body);
-        let msg = `Scratch! Cue ball pocketed. Use arrow keys to move the cue ball to desired location and press 'Enter'. Next ball: ${currentBallIndex} ball.`
+        let msg = `Scratch! Cue ball pocketed. Use arrow keys to move the cue ball to desired location and press 'Enter'.`
         document.getElementById("game-info").innerText = msg;
         return;
     }
@@ -761,12 +761,11 @@ function handleTwoPlayerSinking(body, ballName) {
             declareWinner(3 - currentPlayer); // opponent wins
             return;
         } else if (playerCalledPocket) {
-            // Optional: check if pocket was correct
+            // Check if pocket was correct
             declareWinner(currentPlayer);
             return;
         } else {
-            awaitingNextTurn = true;
-            setTimeout(() => switchTurns(), 1000);
+            declareWinner(3 - currentPlayer);
             return;
         }
     }
@@ -782,32 +781,42 @@ function handleTwoPlayerSinking(body, ballName) {
         }
         gameState = "assigned";
         ballGroupAssigned = true;
-        console.log(`Player ${currentPlayer} is ${playerGroups[currentPlayer]}`);
+        document.getElementById("next-player").innerText = `Player ${currentPlayer}'s turn. Target ${playerGroups[currentPlayer]}`
+        ballTeleport(body, true, scene.getObjectByName("BallJail").position)
     }
 
     // Score update
     if (gameState === "assigned") {
         const group = playerGroups[currentPlayer];
+        console.log(group)
+        console.log(playerGroups)
+        console.log(playerScores)    
         const isPlayerBall = (group === "solids" && number >= 1 && number <= 7) || (group === "stripes" && number >= 9 && number <= 15);
 
         if (isPlayerBall) {
+            didSinkBall = true;
             playerScores[currentPlayer].push(number);
+            console.log(`Player ${currentPlayer} sunk a ${group} ball!`)
             document.getElementById("game-info").innerText = `Player ${currentPlayer} sunk a ${group} ball!`;
 
-            if (playerScores[currentPlayer].length >= 7) {
+            if (playerScores[currentPlayer].length >= 8) {
                 // All group balls sunk → enter 8-ball phase
                 gameState = "8-ball";
+                console.log(`Player ${currentPlayer} may now call the 8-ball.`)
                 document.getElementById("game-info").innerText = `Player ${currentPlayer} may now call the 8-ball.`;
                 playerCalledPocket = prompt("Which pocket are you calling for the 8-ball?");
+                document.getElementById("game-info").innerText = `Pocket ${playerCalledPocket} called.`;
             }
-
+            ballTeleport(body, true, scene.getObjectByName("BallJail").position)
             // Do NOT switch turn
             return;
         } else {
             // Wrong ball → switch turn
             awaitingNextTurn = true;
+            playerScores[3-currentPlayer].push(number)
+            ballTeleport(body, true, scene.getObjectByName("BallJail").position)
+            console.log(`Player ${currentPlayer} sunk opponent's ball. Turn ends.`)
             document.getElementById("game-info").innerText = `Player ${currentPlayer} sunk opponent's ball. Turn ends.`;
-            setTimeout(() => switchTurns(), 1500);
         }
     }
 }
@@ -840,12 +849,26 @@ function stationaryCheck(){
 }
 
 function switchTurns() {
-    currentPlayer = 3 - currentPlayer;
-    awaitingNextTurn = false;
-    document.getElementById("game-info").innerText = `Player ${currentPlayer}'s turn`;
+    if (awaitingNextTurn && allStationary && !didSinkBall){
+        currentPlayer = 3 - currentPlayer;
+        awaitingNextTurn = false;
+        document.getElementById("next-player").innerText = `Player ${currentPlayer}'s turn. Target ${playerGroups[currentPlayer]}`;
+        if (gameState === "8-ball"){
+            gameState = "assigned"
+        }
+        else if (playerScores[currentPlayer].length >= 8){
+            gameState = "8-ball"
+            console.log(`Player ${currentPlayer} may now call the 8-ball.`)
+            document.getElementById("game-info").innerText = `Player ${currentPlayer} may now call the 8-ball.`;
+            playerCalledPocket = prompt("Which pocket are you calling for the 8-ball?");
+            document.getElementById("game-info").innerText = `Pocket ${playerCalledPocket} called.`;
+        }
+    }
+    console.log(gameState)
 }
 
 function declareWinner(playerNum) {
+    document.getElementById("next-player").innerText = ``;
     document.getElementById("game-info").innerText = `🎉 Player ${playerNum} wins the game!`;
     gameState = "over";
     isGameOver = true;
@@ -898,6 +921,9 @@ window.addEventListener('keyup', (event) => {
 function keyboardInput() {
     if (keys["KeyA"]) cuePointer.rotateY(0.05);  // aim left
     if (keys["KeyD"]) cuePointer.rotateY(-0.05);  // aim right
+    if (keys["KeyQ"]) cuePointer.rotateY(0.01);  // slow aim left
+    if (keys["KeyE"]) cuePointer.rotateY(-0.01);  // slow aim right
+
 }
 
 // ============================================================================
@@ -911,7 +937,8 @@ function animate() {
         keyboardInput();
         stationaryCheck();
         moveCueBall();
-        powerBar();    
+        powerBar();
+        switchTurns();
     }
 
     for (var i = 0; i <= pool_balls[0].length-1; i++){
