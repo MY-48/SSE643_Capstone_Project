@@ -827,7 +827,7 @@ function handleSinglePlayerSinking(body, ballName) {
         document.getElementById("game-info").innerText = msg;
 
         // State to handle sinking all balls and ending the game
-        if (currentBallIndex > 2) {
+        if (currentBallIndex > 15) {
             singlePlayerEndTime = performance.now(); // record time
             isGameOver = true;
             const timeTaken = ((singlePlayerEndTime - singlePlayerStartTime) / 1000).toFixed(2);
